@@ -119,3 +119,25 @@ tr.clickable:hover { background: var(--panel-2); }
 .step-dots { display: flex; gap: 6px; margin: 12px 0; }
 .step-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
 .step-dots i.on { background: var(--accent); }
+
+/* ── responsive app shell ─────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+
+@media (max-width: 640px) {
+  .shell { padding: 14px 12px 40px; }
+  h1 { font-size: 22px; }
+  .topbar { padding: 10px 12px; gap: 8px; }
+  .topbar .pill { font-size: 11px; padding: 2px 8px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card { padding: 14px; }
+  .msg { max-width: 92%; font-size: 14px; }
+  .row > .card { flex-basis: 100%; }
+  button { padding: 10px 16px; font-size: 14px; }
+  .composer { gap: 8px; }
+  .composer textarea { min-height: 46px; }
+  .mic { width: 58px; height: 58px; }
+  th, td { padding: 6px; font-size: 13px; }
+}
+
+@media (max-width: 380px) {
+  .topbar .pill:not(:last-child) { display: none; }
+}

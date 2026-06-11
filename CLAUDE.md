@@ -6,6 +6,8 @@ detect weaknesses, and coach them until they're ready.
 
 ## How to work in this repo (agent rules)
 
+0. **`ROADMAP.md` is the live product plan.** Read it + `memory/INDEX.md` first;
+   continue the lowest unfinished phase unless the owner says otherwise.
 1. Read `memory/INDEX.md` before starting any task — it records what is done and why.
 2. When a plan item below is completed, mark it `[x]` here AND append a short
    entry to `memory/` (one file per milestone, linked from `memory/INDEX.md`).

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Profile } from './api'
+import { Landing } from './pages/Landing'
 import { Setup } from './pages/Setup'
 import { ProfileSetup } from './pages/ProfileSetup'
 import { Calibration } from './pages/Calibration'
@@ -7,6 +8,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Interview } from './pages/Interview'
 
 export type View =
+  | { name: 'landing' }
   | { name: 'loading' }
   | { name: 'setup' }
   | { name: 'profile' }
@@ -15,7 +17,9 @@ export type View =
   | { name: 'interview'; mode: 'voice' | 'text'; kind: 'full' | 'coaching'; weaknessId?: number }
 
 export function App() {
-  const [view, setView] = useState<View>({ name: 'loading' })
+  const [view, setView] = useState<View>(() =>
+    localStorage.getItem('sb-entered') ? { name: 'loading' } : { name: 'landing' },
+  )
   const [profile, setProfile] = useState<Profile | null>(null)
 
   const refresh = useCallback(async () => {
@@ -36,13 +40,27 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    void refresh()
+    if (localStorage.getItem('sb-entered')) void refresh()
   }, [refresh])
+
+  const enterApp = () => {
+    localStorage.setItem('sb-entered', '1')
+    setView({ name: 'loading' })
+    void refresh()
+  }
+
+  if (view.name === 'landing') return <Landing onEnter={enterApp} />
 
   return (
     <>
       <div className="topbar">
-        <div className="logo" onClick={() => void refresh()}>
+        <div
+          className="logo"
+          onClick={() => {
+            localStorage.removeItem('sb-entered')
+            setView({ name: 'landing' })
+          }}
+        >
           🎙️ Senior <span>Bro</span>
         </div>
         <div className="spacer" />

@@ -88,7 +88,7 @@ export function Dashboard({
       {history.length > 0 && (
         <>
           <h2>History</h2>
-          <div className="card">
+          <div className="card table-wrap">
             <table>
               <thead>
                 <tr><th>#</th><th>Type</th><th>Mode</th><th>Date</th><th>Score</th><th>Level</th></tr>
