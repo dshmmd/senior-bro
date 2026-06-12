@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type InterviewReport, type Profile } from '../api'
-import { Listener, speak, stopSpeaking } from '../voice'
+import { Listener, Speaker, stopSpeaking } from '../voice'
 import { ReportCard } from './Report'
 
 interface Msg {
   role: 'user' | 'assistant'
   content: string
 }
+
+const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '')
 
 export function Interview({
   profile,
@@ -23,6 +25,7 @@ export function Interview({
 }) {
   const [interviewId, setInterviewId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
+  const [partial, setPartial] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [thinking, setThinking] = useState(true)
   const [done, setDone] = useState(false)
@@ -32,44 +35,56 @@ export function Interview({
   const [listening, setListening] = useState(false)
   const [interim, setInterim] = useState('')
   const listener = useRef(new Listener())
+  const speaker = useRef(new Speaker())
   const bottom = useRef<HTMLDivElement>(null)
   const started = useRef(false)
+
+  const onDelta = (t: string) => {
+    setThinking(false)
+    setPartial((p) => stripToken((p ?? '') + t))
+    if (mode === 'voice') speaker.current.push(t)
+  }
 
   useEffect(() => {
     if (started.current) return
     started.current = true
     api
-      .startInterview(profile.id, mode, kind, weaknessId)
+      .startInterview(profile.id, mode, kind, weaknessId, onDelta)
       .then((r) => {
         setInterviewId(r.interview_id)
         setMessages([{ role: 'assistant', content: r.message }])
-        if (mode === 'voice') speak(r.message)
+        if (mode === 'voice') speaker.current.flush()
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setThinking(false))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => {
+        setPartial(null)
+        setThinking(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.id, mode, kind, weaknessId])
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, thinking, interim])
+  }, [messages, thinking, interim, partial])
 
   useEffect(() => () => stopSpeaking(), [])
 
   const send = async (text: string) => {
-    if (!text.trim() || interviewId === null || thinking) return
-    stopSpeaking()
+    if (!text.trim() || interviewId === null || thinking || partial !== null) return
+    speaker.current.cancel()
     setMessages((m) => [...m, { role: 'user', content: text.trim() }])
     setDraft('')
     setInterim('')
     setThinking(true)
     try {
-      const r = await api.sendMessage(interviewId, text.trim())
+      const r = await api.sendMessage(interviewId, text.trim(), onDelta)
       setMessages((m) => [...m, { role: 'assistant', content: r.message }])
-      if (mode === 'voice') speak(r.message)
+      if (mode === 'voice') speaker.current.flush()
       if (r.done) setDone(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
+      setPartial(null)
       setThinking(false)
     }
   }
@@ -80,7 +95,7 @@ export function Interview({
       setListening(false)
       void send(text)
     } else {
-      stopSpeaking() // barge-in: talking interrupts the interviewer
+      speaker.current.cancel() // barge-in: talking interrupts the interviewer
       setError('')
       try {
         listener.current.start(setInterim)
@@ -93,7 +108,7 @@ export function Interview({
 
   const finish = async () => {
     if (interviewId === null) return
-    stopSpeaking()
+    speaker.current.cancel()
     if (listening) {
       listener.current.stop()
       setListening(false)
@@ -119,26 +134,52 @@ export function Interview({
       </>
     )
 
+  const busy = thinking || partial !== null
+
   return (
     <>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1 style={{ margin: '12px 0' }}>
-          {kind === 'coaching' ? '🎯 Coaching drill' : mode === 'voice' ? '🎙️ Voice interview' : '⌨️ Interview'}
+          {kind === 'coaching'
+            ? '🎯 Coaching drill'
+            : mode === 'voice'
+              ? '🎙️ Voice interview'
+              : '⌨️ Interview'}
         </h1>
         <div className="row">
-          <button className="danger" disabled={evaluating || messages.length < 2} onClick={() => void finish()}>
+          <button
+            className="danger"
+            disabled={evaluating || messages.length < 2}
+            onClick={() => void finish()}
+          >
             {evaluating ? 'Evaluating…' : done ? 'Get my report' : 'End & evaluate'}
           </button>
-          <button className="secondary" onClick={onExit}>Quit</button>
+          <button className="secondary" onClick={onExit}>
+            Quit
+          </button>
         </div>
       </div>
 
       <div className="chat">
         {messages.map((m, i) => (
-          <div key={i} className={`msg ${m.role}`}>{m.content}</div>
+          <div key={i} className={`msg ${m.role}`}>
+            {m.content}
+          </div>
         ))}
-        {interim && <div className="msg user" style={{ opacity: 0.6 }}>{interim}</div>}
-        {thinking && <div className="msg assistant thinking">interviewer is thinking…</div>}
+        {interim && (
+          <div className="msg user" style={{ opacity: 0.6 }}>
+            {interim}
+          </div>
+        )}
+        {partial !== null && (
+          <div className="msg assistant">
+            {partial}
+            <span className="caret">▍</span>
+          </div>
+        )}
+        {thinking && partial === null && (
+          <div className="msg assistant thinking">interviewer is thinking…</div>
+        )}
         {evaluating && <div className="msg assistant thinking">compiling your evaluation report…</div>}
         <div ref={bottom} />
       </div>
@@ -147,11 +188,15 @@ export function Interview({
 
       {!done && mode === 'voice' && (
         <div className="voicebar">
-          <button className={`mic ${listening ? 'live' : ''}`} disabled={thinking} onClick={toggleMic}>
+          <button className={`mic ${listening ? 'live' : ''}`} disabled={busy} onClick={toggleMic}>
             {listening ? '■' : '🎤'}
           </button>
           <div className="hint">
-            {listening ? 'Listening — tap to send your answer' : thinking ? '' : 'Tap the mic and speak your answer'}
+            {listening
+              ? 'Listening — tap to send your answer'
+              : busy
+                ? ''
+                : 'Tap the mic and speak your answer'}
           </div>
         </div>
       )}
@@ -169,11 +214,13 @@ export function Interview({
               }
             }}
           />
-          <button disabled={thinking || !draft.trim()} onClick={() => void send(draft)}>Send</button>
+          <button disabled={busy || !draft.trim()} onClick={() => void send(draft)}>
+            Send
+          </button>
         </div>
       )}
 
-      {done && !report && (
+      {done && (
         <div className="card">
           🏁 The interviewer has wrapped up. Hit <b>Get my report</b> for your full evaluation.
         </div>

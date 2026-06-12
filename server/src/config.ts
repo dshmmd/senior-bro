@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 
-export type Provider = 'anthropic' | 'openai'
+/** 'mock' is for tests/dev only — deterministic canned replies, never shown in the UI. */
+export type Provider = 'anthropic' | 'openai' | 'mock'
 
 export interface AppConfig {
   provider: Provider
@@ -16,6 +17,7 @@ const CONFIG_PATH = path.join(DATA_DIR, 'config.json')
 export const DEFAULT_MODELS: Record<Provider, string> = {
   anthropic: 'claude-opus-4-8',
   openai: 'gpt-4o',
+  mock: 'mock-1',
 }
 
 export function ensureDataDir(): void {
@@ -25,10 +27,9 @@ export function ensureDataDir(): void {
 export function loadConfig(): AppConfig | null {
   try {
     const raw = fs.readFileSync(CONFIG_PATH, 'utf8')
-    const cfg = JSON.parse(raw) as AppConfig
+    const cfg = JSON.parse(raw) as Partial<AppConfig>
     if (!cfg.provider || !cfg.apiKey) return null
-    if (!cfg.model) cfg.model = DEFAULT_MODELS[cfg.provider]
-    return cfg
+    return { provider: cfg.provider, apiKey: cfg.apiKey, model: cfg.model ?? DEFAULT_MODELS[cfg.provider] }
   } catch {
     return null
   }

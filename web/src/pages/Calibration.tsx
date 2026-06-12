@@ -21,7 +21,7 @@ export function Calibration({ profile, onDone }: { profile: Profile; onDone: () 
         setCalibrationId(r.calibration_id)
         setQuestions(r.questions)
       })
-      .catch((err) => setError(err.message))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setBusy(false))
   }, [profile.id])
 
@@ -48,7 +48,9 @@ export function Calibration({ profile, onDone }: { profile: Profile; onDone: () 
     return (
       <div className="card">
         <div className="error">{error}</div>
-        <div className="mt"><button onClick={onDone}>Back</button></div>
+        <div className="mt">
+          <button onClick={onDone}>Back</button>
+        </div>
       </div>
     )
 
@@ -65,19 +67,27 @@ export function Calibration({ profile, onDone }: { profile: Profile; onDone: () 
     )
 
   if (busy || questions.length === 0)
-    return <div className="card msg thinking">{questions.length ? 'Grading your answers…' : 'Generating your calibration questions…'}</div>
+    return (
+      <div className="card msg thinking">
+        {questions.length ? 'Grading your answers…' : 'Generating your calibration questions…'}
+      </div>
+    )
 
   return (
     <>
       <h1>Quick level check</h1>
-      <p className="sub">5 short questions so interviews match your real level. 2-4 sentences each is plenty.</p>
+      <p className="sub">
+        5 short questions so interviews match your real level. 2-4 sentences each is plenty.
+      </p>
       <div className="step-dots">
         {questions.map((_, i) => (
           <i key={i} className={i <= current ? 'on' : ''} />
         ))}
       </div>
       <div className="card">
-        <b>Question {current + 1} of {questions.length}</b>
+        <b>
+          Question {current + 1} of {questions.length}
+        </b>
         <p>{questions[current]}</p>
         <textarea
           value={draft}

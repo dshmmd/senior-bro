@@ -13,7 +13,10 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.skills().then(setPacks).catch(() => {})
+    api
+      .skills()
+      .then(setPacks)
+      .catch(() => undefined)
   }, [])
 
   const save = async () => {
@@ -24,7 +27,10 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
         role,
         company: company || undefined,
         skill_pack: skillPack || undefined,
-        technologies: technologies.split(',').map((t) => t.trim()).filter(Boolean),
+        technologies: technologies
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
         years_experience: years,
         notes: notes || undefined,
       })
@@ -42,17 +48,26 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
       <p className="sub">This shapes every question you'll get — be specific.</p>
       <div className="card">
         <label>Job position you're applying for *</label>
-        <input value={role} placeholder="e.g. Senior Backend Engineer" onChange={(e) => setRole(e.target.value)} />
+        <input
+          value={role}
+          placeholder="e.g. Senior Backend Engineer"
+          onChange={(e) => setRole(e.target.value)}
+        />
 
         <label>Company interview style (optional — adds a company-specific playbook)</label>
-        <select value={skillPack} onChange={(e) => {
-          setSkillPack(e.target.value)
-          const p = packs.find((x) => x.id === e.target.value)
-          if (p && p.company !== 'Generic Startup') setCompany(p.company)
-        }}>
+        <select
+          value={skillPack}
+          onChange={(e) => {
+            setSkillPack(e.target.value)
+            const p = packs.find((x) => x.id === e.target.value)
+            if (p && p.company !== 'Generic Startup') setCompany(p.company)
+          }}
+        >
           <option value="">No specific company</option>
           {packs.map((p) => (
-            <option key={p.id} value={p.id}>{p.company} — {p.summary}</option>
+            <option key={p.id} value={p.id}>
+              {p.company} — {p.summary}
+            </option>
           ))}
         </select>
 
@@ -67,7 +82,13 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
         />
 
         <label>Years of experience: {years}</label>
-        <input type="range" min={0} max={20} value={years} onChange={(e) => setYears(Number(e.target.value))} />
+        <input
+          type="range"
+          min={0}
+          max={20}
+          value={years}
+          onChange={(e) => setYears(Number(e.target.value))}
+        />
 
         <label>Anything else the interviewer should know? (optional)</label>
         <textarea

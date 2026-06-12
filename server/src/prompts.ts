@@ -39,12 +39,10 @@ Generate exactly 5 short calibration questions that, together, let you distingui
 Respond with ONLY a JSON array of 5 strings. No other text.`
 }
 
-export function calibrationGradePrompt(
-  profile: Profile,
-  questions: string[],
-  answers: string[],
-): string {
-  const qa = questions.map((q, i) => `Q${i + 1}: ${q}\nA${i + 1}: ${answers[i] ?? '(no answer)'}`).join('\n\n')
+export function calibrationGradePrompt(profile: Profile, questions: string[], answers: string[]): string {
+  const qa = questions
+    .map((q, i) => `Q${i + 1}: ${q}\nA${i + 1}: ${answers[i] ?? '(no answer)'}`)
+    .join('\n\n')
   return `You are an expert technical interviewer. Grade this calibration quiz for a candidate targeting: ${profile.role}.
 
 ${qa}
@@ -85,11 +83,7 @@ Rules:
 - When you have covered all phases and asked your wrap question, end your final message with the exact token [INTERVIEW_COMPLETE] on its own line.`
 }
 
-export function coachingSystemPrompt(
-  profile: Profile,
-  weakness: Weakness,
-  mode: 'voice' | 'text',
-): string {
+export function coachingSystemPrompt(profile: Profile, weakness: Weakness, mode: 'voice' | 'text'): string {
   return `You are "Senior Bro", a technical interview coach running a focused drill session.
 
 Candidate profile:

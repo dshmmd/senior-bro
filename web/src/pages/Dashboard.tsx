@@ -20,8 +20,14 @@ export function Dashboard({
   const canVoice = voiceSupported()
 
   useEffect(() => {
-    api.listInterviews().then(setHistory).catch(() => {})
-    api.listWeaknesses().then(setWeaknesses).catch(() => {})
+    api
+      .listInterviews()
+      .then(setHistory)
+      .catch(() => undefined)
+    api
+      .listWeaknesses()
+      .then(setWeaknesses)
+      .catch(() => undefined)
   }, [])
 
   const open = weaknesses.filter((w) => w.status !== 'resolved')
@@ -39,7 +45,11 @@ export function Dashboard({
 
       <h2>Start a mock interview</h2>
       <div className="row">
-        <div className="card clickable" style={{ flex: 1 }} onClick={() => canVoice && onStartInterview('voice', 'full')}>
+        <div
+          className="card clickable"
+          style={{ flex: 1 }}
+          onClick={() => canVoice && onStartInterview('voice', 'full')}
+        >
           <b>🎙️ Voice interview</b>
           <p style={{ color: 'var(--muted)', fontSize: 14 }}>
             {canVoice
@@ -49,7 +59,9 @@ export function Dashboard({
         </div>
         <div className="card clickable" style={{ flex: 1 }} onClick={() => onStartInterview('text', 'full')}>
           <b>⌨️ Text interview</b>
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>Classic chat format. Good for code-heavy answers.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
+            Classic chat format. Good for code-heavy answers.
+          </p>
         </div>
       </div>
 
@@ -74,7 +86,9 @@ export function Dashboard({
                 <button
                   className="secondary"
                   onClick={() => {
-                    void api.setWeaknessStatus(w.id, 'resolved').then(() => api.listWeaknesses().then(setWeaknesses))
+                    void api
+                      .setWeaknessStatus(w.id, 'resolved')
+                      .then(() => api.listWeaknesses().then(setWeaknesses))
                   }}
                 >
                   Mark resolved
@@ -91,7 +105,14 @@ export function Dashboard({
           <div className="card table-wrap">
             <table>
               <thead>
-                <tr><th>#</th><th>Type</th><th>Mode</th><th>Date</th><th>Score</th><th>Level</th></tr>
+                <tr>
+                  <th>#</th>
+                  <th>Type</th>
+                  <th>Mode</th>
+                  <th>Date</th>
+                  <th>Score</th>
+                  <th>Level</th>
+                </tr>
               </thead>
               <tbody>
                 {history.map((h) => (
@@ -105,7 +126,13 @@ export function Dashboard({
                     <td>{h.mode}</td>
                     <td>{h.created_at.slice(0, 16)}</td>
                     <td>{h.overall_score ?? '—'}</td>
-                    <td>{h.level_estimate ? <span className={`badge ${h.level_estimate}`}>{h.level_estimate}</span> : '—'}</td>
+                    <td>
+                      {h.level_estimate ? (
+                        <span className={`badge ${h.level_estimate}`}>{h.level_estimate}</span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -115,8 +142,12 @@ export function Dashboard({
       )}
 
       <div className="row mt">
-        <button className="secondary" onClick={onRecalibrate}>Re-run level check</button>
-        <button className="secondary" onClick={onNewProfile}>New target role</button>
+        <button className="secondary" onClick={onRecalibrate}>
+          Re-run level check
+        </button>
+        <button className="secondary" onClick={onNewProfile}>
+          New target role
+        </button>
       </div>
     </>
   )

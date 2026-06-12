@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { api, type Profile } from './api'
 import { Landing } from './pages/Landing'
 import { Setup } from './pages/Setup'
@@ -15,6 +15,15 @@ export type View =
   | { name: 'calibration' }
   | { name: 'dashboard' }
   | { name: 'interview'; mode: 'voice' | 'text'; kind: 'full' | 'coaching'; weaknessId?: number }
+
+function subscribeOnline(cb: () => void) {
+  window.addEventListener('online', cb)
+  window.addEventListener('offline', cb)
+  return () => {
+    window.removeEventListener('online', cb)
+    window.removeEventListener('offline', cb)
+  }
+}
 
 export function App() {
   const [view, setView] = useState<View>(() =>
@@ -49,10 +58,17 @@ export function App() {
     void refresh()
   }
 
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
+
   if (view.name === 'landing') return <Landing onEnter={enterApp} />
 
   return (
     <>
+      {!online && (
+        <div className="offline-banner">
+          ⚠ You're offline — answers can't reach the interviewer right now.
+        </div>
+      )}
       <div className="topbar">
         <div
           className="logo"
@@ -70,7 +86,11 @@ export function App() {
             {profile.level ? ` · ${profile.level}` : ''}
           </div>
         )}
-        <div className="pill clickable" style={{ cursor: 'pointer' }} onClick={() => setView({ name: 'setup' })}>
+        <div
+          className="pill clickable"
+          style={{ cursor: 'pointer' }}
+          onClick={() => setView({ name: 'setup' })}
+        >
           ⚙ settings
         </div>
       </div>

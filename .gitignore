@@ -4,3 +4,7 @@ dist/
 .env
 .DS_Store
 .claude/settings.local.json
+.e2e-home/
+playwright-report/
+test-results/
+.idea/

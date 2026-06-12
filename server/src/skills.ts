@@ -14,17 +14,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /** skills/ lives at the repo root, next to server/ — resolve from dist or src. */
 function skillsDir(): string {
-  for (const candidate of [
-    path.resolve(__dirname, '../../skills'),
-    path.resolve(process.cwd(), 'skills'),
-  ]) {
+  for (const candidate of [path.resolve(__dirname, '../../skills'), path.resolve(process.cwd(), 'skills')]) {
     if (fs.existsSync(candidate)) return candidate
   }
   return path.resolve(__dirname, '../../skills')
 }
 
 function parseFrontmatter(raw: string): { meta: Record<string, string>; body: string } {
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(raw)
   if (!match) return { meta: {}, body: raw }
   const meta: Record<string, string> = {}
   for (const line of match[1]!.split('\n')) {
@@ -46,7 +43,10 @@ export function loadSkillPacks(): SkillPack[] {
       return {
         id: f.replace(/\.md$/, ''),
         company: meta.company ?? f.replace(/\.md$/, ''),
-        roles: (meta.roles ?? '').split(',').map((r) => r.trim()).filter(Boolean),
+        roles: (meta.roles ?? '')
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean),
         summary: meta.summary ?? '',
         body,
       }

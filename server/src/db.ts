@@ -103,7 +103,7 @@ export function initDb(): void {
 }
 
 function rowToProfile(r: Record<string, unknown>): Profile {
-  return { ...(r as object), technologies: JSON.parse(r.technologies as string) } as Profile
+  return { ...(r as object), technologies: JSON.parse(r.technologies as string) as string[] } as Profile
 }
 
 export function createProfile(p: {
@@ -137,9 +137,7 @@ export function latestProfile(): Profile | null {
 }
 
 export function getProfile(id: number): Profile | null {
-  const row = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as
-    | Record<string, unknown>
-    | undefined
+  const row = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as Record<string, unknown> | undefined
   return row ? rowToProfile(row) : null
 }
 
@@ -159,7 +157,11 @@ export function getCalibration(id: number): { id: number; profile_id: number; qu
     | Record<string, unknown>
     | undefined
   if (!row) return null
-  return { id: row.id as number, profile_id: row.profile_id as number, questions: JSON.parse(row.questions as string) }
+  return {
+    id: row.id as number,
+    profile_id: row.profile_id as number,
+    questions: JSON.parse(row.questions as string),
+  }
 }
 
 export function saveCalibrationResult(id: number, result: unknown): void {
@@ -169,8 +171,8 @@ export function saveCalibrationResult(id: number, result: unknown): void {
 function rowToInterview(r: Record<string, unknown>): InterviewRow {
   return {
     ...(r as object),
-    transcript: JSON.parse(r.transcript as string),
-    report: r.report ? JSON.parse(r.report as string) : null,
+    transcript: JSON.parse(r.transcript as string) as TranscriptEntry[],
+    report: r.report ? (JSON.parse(r.report as string) as InterviewReport) : null,
   } as InterviewRow
 }
 
@@ -220,7 +222,9 @@ export function listWeaknesses(profileId: number): Weakness[] {
 }
 
 export function getWeakness(id: number): Weakness | null {
-  return (db.prepare('SELECT * FROM weaknesses WHERE id = ?').get(id) as unknown as Weakness) ?? null
+  return (
+    (db.prepare('SELECT * FROM weaknesses WHERE id = ?').get(id) as unknown as Weakness | undefined) ?? null
+  )
 }
 
 export function setWeaknessStatus(id: number, status: string): void {

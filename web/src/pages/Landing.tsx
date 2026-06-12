@@ -52,9 +52,15 @@ function MagneticButton({ onClick, children }: { onClick: () => void; children: 
 
 const DEMO: { who: 'ai' | 'you'; text: string }[] = [
   { who: 'ai', text: 'Your service p99 latency doubled overnight. Walk me through your first 10 minutes.' },
-  { who: 'you', text: 'First I check what shipped — deploys, config, traffic mix. Then dashboards: is it one endpoint or everything?' },
+  {
+    who: 'you',
+    text: 'First I check what shipped — deploys, config, traffic mix. Then dashboards: is it one endpoint or everything?',
+  },
   { who: 'ai', text: 'Dashboards show one endpoint. DB CPU is flat. What now?' },
-  { who: 'you', text: 'Flat DB but slow endpoint smells like lock contention or an N+1 introduced by the last deploy. I would diff the release…' },
+  {
+    who: 'you',
+    text: 'Flat DB but slow endpoint smells like lock contention or an N+1 introduced by the last deploy. I would diff the release…',
+  },
   { who: 'ai', text: 'Good instinct. Now convince me you can say that in front of a hiring panel. 😏' },
 ]
 
@@ -68,17 +74,22 @@ function LiveDemo() {
       const t = setTimeout(() => setChars((c) => c + 2), 18)
       return () => clearTimeout(t)
     }
-    const t = setTimeout(() => {
-      setLine((l) => (l + 1) % DEMO.length)
-      setChars(0)
-    }, line === DEMO.length - 1 ? 4200 : 1100)
+    const t = setTimeout(
+      () => {
+        setLine((l) => (l + 1) % DEMO.length)
+        setChars(0)
+      },
+      line === DEMO.length - 1 ? 4200 : 1100,
+    )
     return () => clearTimeout(t)
   }, [line, chars])
 
   return (
     <div className="demo-card">
       <div className="demo-head">
-        <i /><i /><i />
+        <i />
+        <i />
+        <i />
         <span>live mock interview</span>
       </div>
       {DEMO.slice(0, line + 1).map((m, i) => (
@@ -122,8 +133,8 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             Interview like it's <span>game day.</span>
           </h1>
           <p className="hero-sub">
-            A voice-enabled AI interviewer that learns your weaknesses, drills them out of you,
-            and adopts the real playbooks of Google, Amazon, Meta — or your dream startup.
+            A voice-enabled AI interviewer that learns your weaknesses, drills them out of you, and adopts the
+            real playbooks of Google, Amazon, Meta — or your dream startup.
           </p>
           <div className="hero-actions">
             <MagneticButton onClick={onEnter}>Launch Senior Bro →</MagneticButton>
@@ -136,41 +147,47 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       </section>
 
       <section id="features" className="features">
-        <h2>Built to make you <span>unrejectable</span></h2>
+        <h2>
+          Built to make you <span>unrejectable</span>
+        </h2>
         <div className="feature-grid">
           <TiltCard icon="🎙️" title="Real voice interviews">
-            Speak out loud. The interviewer talks back, interrupts politely, and never lets a vague
-            answer slide — just like the real thing.
+            Speak out loud. The interviewer talks back, interrupts politely, and never lets a vague answer
+            slide — just like the real thing.
           </TiltCard>
           <TiltCard icon="🏢" title="Company playbooks">
-            Amazon Leadership Principles, Google GCA, Meta speed rounds. Pick a company and face its
-            actual interview culture.
+            Amazon Leadership Principles, Google GCA, Meta speed rounds. Pick a company and face its actual
+            interview culture.
           </TiltCard>
           <TiltCard icon="📐" title="Level calibration">
-            A 5-question check grades you junior → staff first, so every question lands at your
-            edge — never boring, never crushing.
+            A 5-question check grades you junior → staff first, so every question lands at your edge — never
+            boring, never crushing.
           </TiltCard>
           <TiltCard icon="🎯" title="Weakness flywheel">
-            Every interview extracts your specific weaknesses. Future sessions probe them. Drills
-            fix them. Watch them disappear.
+            Every interview extracts your specific weaknesses. Future sessions probe them. Drills fix them.
+            Watch them disappear.
           </TiltCard>
           <TiltCard icon="🧾" title="Hiring-committee reports">
-            Scored across five dimensions with transcript-cited feedback — the report a real
-            committee writes, but for your eyes.
+            Scored across five dimensions with transcript-cited feedback — the report a real committee writes,
+            but for your eyes.
           </TiltCard>
           <TiltCard icon="🔑" title="Your key, your rules">
-            Bring your own Claude or OpenAI key. Everything stays on your machine. Voice runs in the
-            browser — zero extra cost.
+            Bring your own Claude or OpenAI key. Everything stays on your machine. Voice runs in the browser —
+            zero extra cost.
           </TiltCard>
         </div>
       </section>
 
       <section className="demo">
         <div className="demo-copy">
-          <h2>It pushes back.<br /><span>That's the point.</span></h2>
+          <h2>
+            It pushes back.
+            <br />
+            <span>That's the point.</span>
+          </h2>
           <p>
-            Soft questions don't prepare you for hard rooms. Senior Bro follows up, asks for
-            numbers, and coaches you mid-interview when you stall.
+            Soft questions don't prepare you for hard rooms. Senior Bro follows up, asks for numbers, and
+            coaches you mid-interview when you stall.
           </p>
           <MagneticButton onClick={onEnter}>Start a mock interview</MagneticButton>
         </div>
@@ -180,9 +197,21 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       <section className="steps">
         <h2>Three minutes to your first interview</h2>
         <div className="step-row">
-          <div className="step"><span>1</span><b>Paste your AI key</b><p>Claude or OpenAI. Validated instantly, stored only on your machine.</p></div>
-          <div className="step"><span>2</span><b>Tell it your target</b><p>Role, company, tech stack. Take the 5-question level check.</p></div>
-          <div className="step"><span>3</span><b>Talk.</b><p>Voice or text. Finish, get your report, drill your weaknesses.</p></div>
+          <div className="step">
+            <span>1</span>
+            <b>Paste your AI key</b>
+            <p>Claude or OpenAI. Validated instantly, stored only on your machine.</p>
+          </div>
+          <div className="step">
+            <span>2</span>
+            <b>Tell it your target</b>
+            <p>Role, company, tech stack. Take the 5-question level check.</p>
+          </div>
+          <div className="step">
+            <span>3</span>
+            <b>Talk.</b>
+            <p>Voice or text. Finish, get your report, drill your weaknesses.</p>
+          </div>
         </div>
       </section>
 

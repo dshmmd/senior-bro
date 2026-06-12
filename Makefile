@@ -1,4 +1,4 @@
-.PHONY: install dev build start check typecheck smoke clean
+.PHONY: install dev build start check typecheck lint format smoke e2e clean
 
 install: ## install all workspace dependencies
 	npm install
@@ -15,10 +15,19 @@ start: build ## run production app on http://localhost:4747
 typecheck: ## strict TS check on both workspaces
 	npm run typecheck
 
+lint: ## eslint (strict, type-checked) + prettier check
+	npm run lint && npm run format:check
+
+format: ## auto-format the codebase
+	npm run format
+
 smoke: ## boot built server and verify key endpoints
 	npm run smoke
 
-check: typecheck build smoke ## full verification gate (run before any commit)
+e2e: ## playwright happy-path against the built app (mock provider)
+	npm run e2e
+
+check: lint typecheck build smoke ## full verification gate (run before any commit)
 
 clean: ## remove build artifacts and node_modules
 	rm -rf node_modules server/node_modules web/node_modules server/dist web/dist

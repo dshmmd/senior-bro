@@ -35,11 +35,7 @@ const shapes: ShapeFn[] = [
     const v = (i / n) * Math.PI * 2
     const R = 0.72
     const r = 0.34
-    return [
-      (R + r * Math.cos(u)) * Math.cos(v),
-      r * Math.sin(u),
-      (R + r * Math.cos(u)) * Math.sin(v),
-    ]
+    return [(R + r * Math.cos(u)) * Math.cos(v), r * Math.sin(u), (R + r * Math.cos(u)) * Math.sin(v)]
   },
   // double helix with rungs
   (i, n) => {
@@ -129,8 +125,8 @@ export function createScene(canvas: HTMLCanvasElement, reducedMotion: boolean): 
     pointerY = e.clientY - rect.top
     pointerOn = true
     // cursor bends the rotation target
-    targetRotY = 0.4 + ((pointerX / w) - 0.5) * 1.6
-    targetRotX = 0.18 + ((pointerY / h) - 0.5) * 1.0
+    targetRotY = 0.4 + (pointerX / w - 0.5) * 1.6
+    targetRotX = 0.18 + (pointerY / h - 0.5) * 1.0
   }
   const onLeave = () => {
     pointerOn = false

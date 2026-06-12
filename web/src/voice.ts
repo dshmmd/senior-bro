@@ -27,8 +27,7 @@ function recognitionCtor(): RecognitionCtor | null {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null) as RecognitionCtor | null
 }
 
-export const voiceSupported = (): boolean =>
-  recognitionCtor() !== null && 'speechSynthesis' in window
+export const voiceSupported = (): boolean => recognitionCtor() !== null && 'speechSynthesis' in window
 
 export class Listener {
   private rec: SpeechRecognitionLike | null = null
@@ -56,7 +55,7 @@ export class Listener {
     this.rec.onend = () => {
       if (this.active) this.rec?.start()
     }
-    this.rec.onerror = () => {}
+    this.rec.onerror = () => undefined
     this.active = true
     this.rec.start()
   }
@@ -69,17 +68,56 @@ export class Listener {
   }
 }
 
-export function speak(text: string, onDone?: () => void): void {
-  window.speechSynthesis.cancel()
+function makeUtterance(text: string): SpeechSynthesisUtterance {
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.rate = 1.05
   const voices = window.speechSynthesis.getVoices()
   const preferred = voices.find((v) => v.lang.startsWith('en') && v.localService) ?? voices[0]
   if (preferred) utterance.voice = preferred
+  return utterance
+}
+
+export function speak(text: string, onDone?: () => void): void {
+  window.speechSynthesis.cancel()
+  const utterance = makeUtterance(text)
   if (onDone) utterance.onend = onDone
   window.speechSynthesis.speak(utterance)
 }
 
 export function stopSpeaking(): void {
   window.speechSynthesis.cancel()
+}
+
+/**
+ * Sentence-by-sentence TTS for streamed replies: feed it raw text deltas,
+ * it speaks each completed sentence while the rest is still arriving.
+ */
+export class Speaker {
+  private buffer = ''
+
+  push(delta: string): void {
+    this.buffer += delta
+    // flush complete sentences; keep the partial tail buffered
+    const re = /[^.!?\n]*[.!?\n]+/g
+    let consumed = 0
+    let match: RegExpExecArray | null
+    while ((match = re.exec(this.buffer)) !== null) {
+      const sentence = match[0].replace('[INTERVIEW_COMPLETE]', '').trim()
+      if (sentence) window.speechSynthesis.speak(makeUtterance(sentence))
+      consumed = re.lastIndex
+    }
+    this.buffer = this.buffer.slice(consumed)
+  }
+
+  /** Speak whatever is left (end of stream). */
+  flush(): void {
+    const rest = this.buffer.replace('[INTERVIEW_COMPLETE]', '').trim()
+    this.buffer = ''
+    if (rest) window.speechSynthesis.speak(makeUtterance(rest))
+  }
+
+  cancel(): void {
+    this.buffer = ''
+    window.speechSynthesis.cancel()
+  }
 }

@@ -44,7 +44,7 @@ metered usage, fiat + crypto payments.
 Working app: BYOK setup, profile, calibration, voice/text interviews, evaluation,
 weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 
-### Phase 1 — Landing page that blows minds 🎯 CURRENT
+### Phase 1 — Landing page that blows minds ✅ (2026-06-11, owner approved)
 - [x] L1: Cursor-aware 3D hero — morphing particle shapes (sphere → torus → helix → wave),
       mouse bends rotation + repels particles, click/tap morphs, depth-colored connective lines
 - [x] L2: Cursor spotlight, 3D tilt feature cards, magnetic CTA
@@ -55,12 +55,13 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - [x] L7: Makefile (install/dev/build/check/smoke/clean)
 - **Gate: owner reviews the landing before Phase 2 starts.**
 
-### Phase 2 — Production hardening
-- [ ] CI: GitHub Actions — typecheck, ESLint (max strictness) + Prettier, build, smoke, on every push/PR
-- [ ] SSE streaming interviewer replies (kill the "thinking…" wait; speak sentence-by-sentence in voice mode)
-- [ ] Server input validation (zod), rate limiting, structured logging
-- [ ] Error boundaries + retry UX in the SPA; offline/disconnected states
-- [ ] E2E happy-path test (Playwright) with a mocked provider
+### Phase 2 — Production hardening ✅ (2026-06-13)
+- [x] CI: GitHub Actions — typecheck, ESLint (max strictness) + Prettier, build, smoke, on every push/PR
+- [x] SSE streaming interviewer replies (kill the "thinking…" wait; speak sentence-by-sentence in voice mode)
+- [x] Server input validation (zod), rate limiting, structured logging
+- [x] Error boundaries + retry UX in the SPA; offline/disconnected states
+- [x] E2E happy-path test (Playwright) with a mocked provider
+- **Gate: owner reviews before Phase 3 (accounts & hosted mode) starts.**
 
 ### Phase 3 — Accounts & hosted mode
 - [ ] User accounts (email magic-link; no passwords), sessions, per-user data isolation

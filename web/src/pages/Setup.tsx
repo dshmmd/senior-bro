@@ -42,8 +42,8 @@ export function Setup({ onDone }: { onDone: () => void }) {
     <>
       <h1>Welcome 👋</h1>
       <p className="sub">
-        Senior Bro runs entirely on your machine and uses <b>your own AI key</b>. Nothing is sent
-        anywhere except directly to the AI provider you choose.
+        Senior Bro runs entirely on your machine and uses <b>your own AI key</b>. Nothing is sent anywhere
+        except directly to the AI provider you choose.
       </p>
 
       <h2>1. Pick your AI provider</h2>
