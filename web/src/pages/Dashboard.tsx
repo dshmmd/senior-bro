@@ -8,11 +8,13 @@ export function Dashboard({
   onStartInterview,
   onNewProfile,
   onRecalibrate,
+  onOpenProgress,
 }: {
   profile: Profile
   onStartInterview: (mode: 'voice' | 'text', kind: 'full' | 'coaching', weaknessId?: number) => void
   onNewProfile: () => void
   onRecalibrate: () => void
+  onOpenProgress: () => void
 }) {
   const [history, setHistory] = useState<InterviewSummary[]>([])
   const [weaknesses, setWeaknesses] = useState<Weakness[]>([])
@@ -42,6 +44,18 @@ export function Dashboard({
         {profile.company ? ` @ ${profile.company}` : ''} ·{' '}
         {profile.level && <span className={`badge ${profile.level}`}>{profile.level}</span>}
       </p>
+
+      <div className="card clickable" onClick={onOpenProgress} style={{ borderColor: 'var(--accent)' }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <b>🌌 Your constellation</b>
+            <div style={{ color: 'var(--muted)', fontSize: 14 }}>
+              Light up every skill, heal your weaknesses, earn medals — track it all here.
+            </div>
+          </div>
+          <span style={{ fontSize: 22 }}>→</span>
+        </div>
+      </div>
 
       <h2>Start a mock interview</h2>
       <div className="row">

@@ -46,6 +46,33 @@ export interface InterviewSummary {
   level_estimate: string | null
 }
 
+export interface DimensionProgress {
+  name: string
+  best: number
+  avg: number
+  count: number
+  lit: number
+  crystallized: boolean
+}
+
+export interface Medal {
+  id: string
+  title: string
+  icon: string
+  detail: string
+  earned: boolean
+}
+
+export interface Progress {
+  interviews_total: number
+  dimensions: DimensionProgress[]
+  weaknesses: { open: number; improving: number; resolved: number; total: number; items: Weakness[] }
+  streak: { current: number; longest: number; days: { date: string; count: number }[] }
+  level_trail: { label: string; reached: boolean; current: boolean }[]
+  medals: Medal[]
+  overall_completion: number
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { 'content-type': 'application/json' },
@@ -146,4 +173,5 @@ export const api = {
   listInterviews: () => request<InterviewSummary[]>('/interviews'),
   listWeaknesses: () => request<Weakness[]>('/weaknesses'),
   setWeaknessStatus: (id: number, status: string) => post(`/weaknesses/${id}/status`, { status }),
+  progress: () => request<Progress | null>('/progress'),
 }

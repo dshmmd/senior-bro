@@ -60,4 +60,12 @@ test('landing → profile → calibration → interview → report', async ({ pa
   await expect(page.getByRole('heading', { name: 'Your interview report' })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('72')).toBeVisible()
   await expect(page.getByText('System design depth', { exact: true })).toBeVisible()
+
+  // back to dashboard → open the constellation (Phase 6 gamification)
+  await page.getByRole('button', { name: 'Back to dashboard →' }).click()
+  await page.getByText('🌌 Your constellation').click()
+  await expect(page.getByRole('heading', { name: 'Your constellation' })).toBeVisible()
+  await expect(page.getByText('sky lit')).toBeVisible()
+  await expect(page.getByText('Level trail')).toBeVisible()
+  await expect(page.getByText('Communication Master')).toBeVisible()
 })

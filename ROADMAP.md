@@ -31,10 +31,19 @@ metered usage, fiat + crypto payments.
 
 ## Open questions for the product owner
 
-- Q1: Hosted SaaS needs accounts + a server we operate. Keep local BYOK app as the
-  free tier and add a hosted deployment of the same codebase? (Roadmap assumes yes.)
+- ~~Q1~~ **ANSWERED (2026-06-24): dual mode, hosted-first.** Keep local BYOK as a
+  free/dev tier but make multi-user hosted the primary product (one codebase,
+  `SENIORBRO_MODE=local|hosted`). **Deploy target: `95.38.235.93`** (owner's SSH key
+  is already on the box). Do NOT deploy until Phase 3 (accounts + isolation) exists —
+  shipping the single-user app to a public host would expose one shared datastore.
 - Q2: Which countries first for job-opportunity search? Affects which job boards/APIs.
 - Q3: Subscription pricing instinct (e.g. $9/mo with N interview-hours) — needed before Phase 8 ships.
+
+## Build order (owner-directed, may differ from phase numbers)
+
+- 2026-06-24: owner chose **Phase 6 (gamification)** as the next build — works
+  single-user today, highest demo impact. Phase 3 (accounts/hosted) deferred but
+  is the gate before any deploy to `95.38.235.93`.
 
 ---
 
@@ -81,11 +90,14 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - [ ] Job discovery: web search for live openings in the user's country/role; match-scored against profile
 - [ ] Target-company mode: pick a real opening → interview prep tuned to that posting
 
-### Phase 6 — Progress visualization & gamification (BAD-ASS edition)
-- [ ] Constellation skill map (D7): canvas/SVG star field per field, stars light as interviews cover skills
-- [ ] Weakness arcs: open weaknesses are dark rifts; coaching drills visibly heal them
-- [ ] Medal ceremony: completing a cluster triggers a full-screen crystallization moment; medals on profile
-- [ ] Streaks, session history heat strip, level-progression trail (junior → staff)
+### Phase 6 — Progress visualization & gamification (BAD-ASS edition) ✅ (2026-06-24)
+- [x] Constellation skill map (D7): canvas star field, 5 dimension clusters light as interviews cover skills
+- [x] Weakness arcs: open/improving/resolved rift bar; crystallized clusters glow gold
+- [x] Medal shelf: dimension-mastery medals + Clean Slate / Marathoner / Seasoned; crystallization glow + "sky complete" finale banner
+- [x] Streaks, 12-week practice heat strip, level-progression trail (junior → staff)
+- Server: `GET /api/progress` (`server/src/progress.ts` derives everything from interviews + weaknesses).
+- **Gate: owner reviews before next phase.**
+- Deferred polish: full-screen medal *ceremony* animation on the exact interview where a cluster crystallizes (currently shown as state on the progress page, not a triggered moment).
 
 ### Phase 7 — Learn-while-interviewing
 - [ ] Teaching mode: when the user doesn't know a topic, interviewer switches to socratic micro-lesson, then re-asks

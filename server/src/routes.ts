@@ -5,6 +5,7 @@ import { DEFAULT_MODELS, loadConfig, saveConfig, type AppConfig } from './config
 import * as db from './db.js'
 import { chat, extractJson, validateKey, type ChatMessage } from './providers.js'
 import { getSkillPack, loadSkillPacks } from './skills.js'
+import { computeProgress } from './progress.js'
 import {
   FIRST_MESSAGE_TRIGGER,
   calibrationGeneratePrompt,
@@ -321,4 +322,14 @@ api.post('/weaknesses/:id/status', async (c) => {
   const { status } = await parseBody(c, weaknessStatusSchema)
   db.setWeaknessStatus(Number(c.req.param('id')), status)
   return c.json({ ok: true })
+})
+
+// ── progress (gamification) ─────────────────────────────────────────
+
+api.get('/progress', (c) => {
+  const profile = db.latestProfile()
+  if (!profile) return c.json(null)
+  const interviews = db.listInterviews().filter((i) => i.profile_id === profile.id)
+  const weaknesses = db.listWeaknesses(profile.id)
+  return c.json(computeProgress(profile, interviews, weaknesses))
 })

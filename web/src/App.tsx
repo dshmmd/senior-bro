@@ -6,6 +6,7 @@ import { ProfileSetup } from './pages/ProfileSetup'
 import { Calibration } from './pages/Calibration'
 import { Dashboard } from './pages/Dashboard'
 import { Interview } from './pages/Interview'
+import { Progress } from './pages/Progress'
 
 export type View =
   | { name: 'landing' }
@@ -14,6 +15,7 @@ export type View =
   | { name: 'profile' }
   | { name: 'calibration' }
   | { name: 'dashboard' }
+  | { name: 'progress' }
   | { name: 'interview'; mode: 'voice' | 'text'; kind: 'full' | 'coaching'; weaknessId?: number }
 
 function subscribeOnline(cb: () => void) {
@@ -116,8 +118,10 @@ export function App() {
             }
             onNewProfile={() => setView({ name: 'profile' })}
             onRecalibrate={() => setView({ name: 'calibration' })}
+            onOpenProgress={() => setView({ name: 'progress' })}
           />
         )}
+        {view.name === 'progress' && <Progress onBack={() => setView({ name: 'dashboard' })} />}
         {view.name === 'interview' && profile && (
           <Interview
             profile={profile}
