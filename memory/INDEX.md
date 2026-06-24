@@ -20,3 +20,7 @@ One entry per completed milestone. Read this before working on the repo.
   `claude-cli`/`codex-cli` providers so a Pro/ChatGPT subscription powers the app
   with no API credits (local only; D8). CLAUDE.md "▶ START HERE" + `/continue`
   command so any session resumes with full context.
+- [2026-06-24 — Phase 3: accounts & hosted mode](2026-06-24-phase3-accounts-hosted.md) —
+  `SENIORBRO_MODE=local|hosted`; magic-link accounts + sessions, per-user data isolation
+  (`user_id` migration), per-user provider config encrypted at rest (AES-256-GCM). Local
+  mode unchanged. Unblocks deploy to 95.38.235.93; R13 admin/metering (Ph 8/9) still pending.

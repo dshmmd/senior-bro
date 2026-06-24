@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { api, type Profile } from './api'
 import { Landing } from './pages/Landing'
+import { Login } from './pages/Login'
 import { Setup } from './pages/Setup'
 import { ProfileSetup } from './pages/ProfileSetup'
 import { Calibration } from './pages/Calibration'
@@ -11,6 +12,7 @@ import { Progress } from './pages/Progress'
 export type View =
   | { name: 'landing' }
   | { name: 'loading' }
+  | { name: 'login' }
   | { name: 'setup' }
   | { name: 'profile' }
   | { name: 'calibration' }
@@ -27,16 +29,27 @@ function subscribeOnline(cb: () => void) {
   }
 }
 
+const hasMagicToken = () => new URLSearchParams(window.location.search).has('magic')
+
 export function App() {
   const [view, setView] = useState<View>(() =>
-    localStorage.getItem('sb-entered') ? { name: 'loading' } : { name: 'landing' },
+    hasMagicToken() || localStorage.getItem('sb-entered') ? { name: 'loading' } : { name: 'landing' },
   )
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [account, setAccount] = useState<{ hosted: boolean; email: string | null }>({
+    hosted: false,
+    email: null,
+  })
 
   const refresh = useCallback(async () => {
     const health = await api.health().catch(() => null)
     if (!health) {
       setView({ name: 'loading' })
+      return
+    }
+    setAccount({ hosted: health.mode === 'hosted', email: health.user?.email ?? null })
+    if (health.mode === 'hosted' && !health.authed) {
+      setView({ name: 'login' })
       return
     }
     if (!health.configured) {
@@ -51,6 +64,19 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    // Arriving from a magic link: verify the token, then drop into the app.
+    if (hasMagicToken()) {
+      const token = new URLSearchParams(window.location.search).get('magic')!
+      localStorage.setItem('sb-entered', '1')
+      void api
+        .verifyMagicLink(token)
+        .catch(() => undefined)
+        .finally(() => {
+          window.history.replaceState({}, '', window.location.pathname)
+          void refresh()
+        })
+      return
+    }
     if (localStorage.getItem('sb-entered')) void refresh()
   }, [refresh])
 
@@ -60,9 +86,16 @@ export function App() {
     void refresh()
   }
 
+  const logout = async () => {
+    await api.logout().catch(() => undefined)
+    setProfile(null)
+    setView({ name: 'login' })
+  }
+
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
 
   if (view.name === 'landing') return <Landing onEnter={enterApp} />
+  if (view.name === 'login') return <Login onSignedIn={() => void refresh()} />
 
   return (
     <>
@@ -95,6 +128,11 @@ export function App() {
         >
           ⚙ settings
         </div>
+        {account.hosted && (
+          <div className="pill clickable" style={{ cursor: 'pointer' }} onClick={() => void logout()}>
+            {account.email ? `↩ ${account.email}` : '↩ sign out'}
+          </div>
+        )}
       </div>
       <div className="shell">
         {view.name === 'loading' && (

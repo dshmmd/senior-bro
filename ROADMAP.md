@@ -35,8 +35,10 @@ metered usage, fiat + crypto payments.
 - ~~Q1~~ **ANSWERED (2026-06-24): dual mode, hosted-first.** Keep local BYOK as a
   free/dev tier but make multi-user hosted the primary product (one codebase,
   `SENIORBRO_MODE=local|hosted`). **Deploy target: `95.38.235.93`** (owner's SSH key
-  is already on the box). Do NOT deploy until Phase 3 (accounts + isolation) exists —
-  shipping the single-user app to a public host would expose one shared datastore.
+  is already on the box). ~~Do NOT deploy until Phase 3 (accounts + isolation) exists~~
+  **Phase 3 shipped 2026-06-24** — accounts + per-user isolation now exist, so a hosted
+  deploy no longer exposes a shared datastore. Owner still wants the R13 admin/metering
+  bundle (Phases 8/9) before actually charging users.
 - Q2: Which countries first for job-opportunity search? Affects which job boards/APIs.
 - Q3: Subscription pricing instinct (e.g. $9/mo with N interview-hours) — needed before Phase 8 ships.
 
@@ -77,10 +79,24 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - [x] E2E happy-path test (Playwright) with a mocked provider
 - **Gate: owner reviews before Phase 3 (accounts & hosted mode) starts.**
 
-### Phase 3 — Accounts & hosted mode
-- [ ] User accounts (email magic-link; no passwords), sessions, per-user data isolation
-- [ ] Same codebase runs in `local` mode (today's behavior) or `hosted` mode (multi-user)
-- [ ] Provider keys per user, encrypted at rest; host-key pool for subscribers
+### Phase 3 — Accounts & hosted mode ✅ (2026-06-24)
+- [x] User accounts (email magic-link; no passwords), sessions, per-user data isolation
+- [x] Same codebase runs in `local` mode (today's behavior) or `hosted` mode (multi-user)
+- [x] Provider keys per user, encrypted at rest (AES-256-GCM); host-key pool deferred to Phase 8/9
+- `SENIORBRO_MODE=local|hosted` (`server/src/mode.ts`). Local = today's single implicit
+  owner, no auth. Hosted = magic-link sessions (`server/src/auth.ts`), `sb_session` cookie.
+- Per-user provider config moved from `config.json` into the `users` row, api key
+  encrypted at rest (`server/src/crypto.ts`, key from `SENIORBRO_SECRET` or a 0600 keyfile).
+  Legacy `config.json` auto-imported into the local owner on first boot.
+- Isolation: `user_id` on profiles (+ additive migration/back-fill); every route resolves
+  the user and guards by-id resources with `ownProfile`/`ownInterview` (404 cross-user).
+- CLI subscription providers (claude-cli/codex-cli) are rejected in hosted mode (D8).
+- Magic-link delivery is dependency-free: logged + optional `SENIORBRO_MAGICLINK_WEBHOOK`;
+  in non-prod the link is returned to the client so dev/staging can sign in.
+- **Gate: owner reviews before Phase 4. Deploy to 95.38.235.93 is now unblocked**
+  (run with `SENIORBRO_MODE=hosted` + `SENIORBRO_SECRET`), though the R13 admin/metering
+  bundle (Phases 8/9) is the owner's stated must-have before charging anyone.
+- Deferred: host-key pool for subscribers (belongs with Phase 8/9 admin key management).
 
 ### Phase 4 — Personalization engine ("it knows me")
 - [ ] Event log: every action (answers, skips, durations, struggles, choices) appended per user

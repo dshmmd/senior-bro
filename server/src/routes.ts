@@ -1,7 +1,12 @@
 import { Hono, type Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
-import { DEFAULT_MODELS, isCliProvider, loadConfig, saveConfig, type AppConfig } from './config.js'
+import { DEFAULT_MODELS, isCliProvider, type AppConfig } from './config.js'
+import { currentUser, endSession, requireUser, startSession } from './auth.js'
+import { randomToken } from './crypto.js'
+import { HttpError } from './http.js'
+import { isHosted, MODE } from './mode.js'
+import { revealLinks, sendMagicLink } from './mailer.js'
 import * as db from './db.js'
 import { chat, extractJson, validateKey, type ChatMessage } from './providers.js'
 import { getSkillPack, loadSkillPacks } from './skills.js'
@@ -17,19 +22,27 @@ import {
 
 export const api = new Hono()
 
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message)
-  }
+/** Resolve the requesting user, then their provider config — 401/409 otherwise. */
+function requireConfig(c: Context): { user: db.User; cfg: AppConfig } {
+  const user = requireUser(c)
+  const cfg = db.getUserConfig(user.id)
+  if (!cfg) throw new HttpError(409, 'Not configured: set provider and API key first')
+  return { user, cfg }
 }
 
-function requireConfig(): AppConfig {
-  const cfg = loadConfig()
-  if (!cfg) throw new HttpError(409, 'Not configured: set provider and API key first')
-  return cfg
+/** Throw 404 unless `profileId` belongs to `userId` (cross-user isolation guard). */
+function ownProfile(userId: number, profileId: number): db.Profile {
+  const profile = db.getProfile(profileId)
+  if (profile?.user_id !== userId) throw new HttpError(404, 'profile not found')
+  return profile
+}
+
+/** Throw 404 unless `interviewId` is owned (via its profile) by `userId`. */
+function ownInterview(userId: number, interviewId: number): db.InterviewRow {
+  const interview = db.getInterview(interviewId)
+  if (!interview) throw new HttpError(404, 'interview not found')
+  ownProfile(userId, interview.profile_id)
+  return interview
 }
 
 async function parseBody<S extends z.ZodTypeAny>(c: Context, schema: S): Promise<z.infer<S>> {
@@ -64,6 +77,15 @@ const configSchema = z
     message: 'API key is required for this provider',
     path: ['apiKey'],
   })
+  // CLI subscription providers run the user's local login — only valid in local
+  // mode (D8). A hosted server must never try to proxy a customer's CLI.
+  .refine((v) => !isHosted || !isCliProvider(v.provider), {
+    message: 'subscription/CLI providers are not available on the hosted service — use an API key',
+    path: ['provider'],
+  })
+
+const authRequestSchema = z.object({ email: z.string().trim().email().max(200) })
+const authVerifySchema = z.object({ token: z.string().min(10).max(200) })
 
 const profileSchema = z.object({
   role: z.string().trim().min(2).max(200),
@@ -94,14 +116,26 @@ const weaknessStatusSchema = z.object({ status: z.enum(['open', 'improving', 're
 
 // ── config ──────────────────────────────────────────────────────────
 
-api.get('/health', (c) => c.json({ ok: true, configured: loadConfig() !== null }))
+api.get('/health', (c) => {
+  const user = currentUser(c)
+  const configured = user ? db.getUserConfig(user.id) !== null : false
+  return c.json({
+    ok: true,
+    mode: MODE,
+    authed: user !== null,
+    user: user ? { email: user.email, role: user.role } : null,
+    configured,
+  })
+})
 
 api.get('/config', (c) => {
-  const cfg = loadConfig()
+  const user = requireUser(c)
+  const cfg = db.getUserConfig(user.id)
   return c.json(cfg ? { provider: cfg.provider, model: cfg.model, hasKey: true } : { hasKey: false })
 })
 
 api.post('/config', async (c) => {
+  const user = requireUser(c)
   const body = await parseBody(c, configSchema)
   const cfg: AppConfig = {
     provider: body.provider,
@@ -113,8 +147,42 @@ api.post('/config', async (c) => {
     const what = isCliProvider(cfg.provider) ? 'CLI check' : 'API key validation'
     throw new HttpError(400, `${what} failed: ${check.error ?? 'unknown'}`)
   }
-  saveConfig(cfg)
+  db.setUserConfig(user.id, cfg)
   return c.json({ ok: true, provider: cfg.provider, model: cfg.model })
+})
+
+// ── auth (hosted mode: email magic-link, no passwords) ───────────────
+
+api.get('/auth/me', (c) => {
+  const user = currentUser(c)
+  return c.json(user ? { email: user.email, role: user.role } : null)
+})
+
+api.post('/auth/request', async (c) => {
+  if (!isHosted) throw new HttpError(400, 'accounts are only used in hosted mode')
+  const { email } = await parseBody(c, authRequestSchema)
+  const token = randomToken(32)
+  db.createMagicLink(email, token, 20)
+  const origin = c.req.header('origin') ?? new URL(c.req.url).origin
+  const link = `${origin}/?magic=${token}`
+  await sendMagicLink(email, link)
+  // In non-prod (no real mailbox) we hand the link back so dev/staging can sign in.
+  return c.json({ ok: true, sent: true, ...(revealLinks() ? { link } : {}) })
+})
+
+api.post('/auth/verify', async (c) => {
+  if (!isHosted) throw new HttpError(400, 'accounts are only used in hosted mode')
+  const { token } = await parseBody(c, authVerifySchema)
+  const email = db.consumeMagicLink(token)
+  if (!email) throw new HttpError(400, 'this sign-in link is invalid or expired — request a new one')
+  const user = db.upsertUserByEmail(email)
+  startSession(c, user.id)
+  return c.json({ ok: true, email: user.email, role: user.role })
+})
+
+api.post('/auth/logout', (c) => {
+  endSession(c)
+  return c.json({ ok: true })
 })
 
 // ── skills ──────────────────────────────────────────────────────────
@@ -126,8 +194,9 @@ api.get('/skills', (c) =>
 // ── profile ─────────────────────────────────────────────────────────
 
 api.post('/profile', async (c) => {
+  const user = requireUser(c)
   const body = await parseBody(c, profileSchema)
-  const profile = db.createProfile({
+  const profile = db.createProfile(user.id, {
     role: body.role,
     company: body.company ?? null,
     skill_pack: body.skill_pack ?? null,
@@ -139,7 +208,8 @@ api.post('/profile', async (c) => {
 })
 
 api.get('/profile', (c) => {
-  const profile = db.latestProfile()
+  const user = requireUser(c)
+  const profile = db.latestProfile(user.id)
   if (!profile) return c.json(null)
   return c.json({ ...profile, weaknesses: db.listWeaknesses(profile.id) })
 })
@@ -147,10 +217,9 @@ api.get('/profile', (c) => {
 // ── calibration ─────────────────────────────────────────────────────
 
 api.post('/calibration/start', async (c) => {
-  const cfg = requireConfig()
+  const { user, cfg } = requireConfig(c)
   const { profile_id } = await parseBody(c, calibrationStartSchema)
-  const profile = db.getProfile(profile_id)
-  if (!profile) throw new HttpError(404, 'profile not found')
+  const profile = ownProfile(user.id, profile_id)
   const raw = await chat(cfg, 'You generate interview calibration questions as JSON.', [
     { role: 'user', content: calibrationGeneratePrompt(profile) },
   ])
@@ -160,12 +229,11 @@ api.post('/calibration/start', async (c) => {
 })
 
 api.post('/calibration/submit', async (c) => {
-  const cfg = requireConfig()
+  const { user, cfg } = requireConfig(c)
   const { calibration_id, answers } = await parseBody(c, calibrationSubmitSchema)
   const calibration = db.getCalibration(calibration_id)
   if (!calibration) throw new HttpError(404, 'calibration not found')
-  const profile = db.getProfile(calibration.profile_id)
-  if (!profile) throw new HttpError(404, 'profile not found')
+  const profile = ownProfile(user.id, calibration.profile_id)
   const raw = await chat(cfg, 'You grade interview calibration quizzes as JSON.', [
     { role: 'user', content: calibrationGradePrompt(profile, calibration.questions as string[], answers) },
   ])
@@ -193,10 +261,9 @@ function systemFor(interview: db.InterviewRow, weaknessId?: number): string {
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '').trim()
 
 api.post('/interviews', async (c) => {
-  const cfg = requireConfig()
+  const { user, cfg } = requireConfig(c)
   const body = await parseBody(c, interviewSchema)
-  const profile = db.getProfile(body.profile_id)
-  if (!profile) throw new HttpError(404, 'profile not found')
+  const profile = ownProfile(user.id, body.profile_id)
 
   const interview = db.createInterview(profile.id, body.mode, body.kind)
   const system = systemFor(interview, body.weakness_id)
@@ -232,10 +299,9 @@ api.post('/interviews', async (c) => {
 })
 
 api.post('/interviews/:id/messages', async (c) => {
-  const cfg = requireConfig()
+  const { user, cfg } = requireConfig(c)
   const id = Number(c.req.param('id'))
-  const interview = db.getInterview(id)
-  if (!interview) throw new HttpError(404, 'interview not found')
+  const interview = ownInterview(user.id, id)
   if (interview.status !== 'active') throw new HttpError(409, 'interview already finished')
 
   const { content } = await parseBody(c, messageSchema)
@@ -275,16 +341,14 @@ api.post('/interviews/:id/messages', async (c) => {
 })
 
 api.post('/interviews/:id/finish', async (c) => {
-  const cfg = requireConfig()
+  const { user, cfg } = requireConfig(c)
   const id = Number(c.req.param('id'))
-  const interview = db.getInterview(id)
-  if (!interview) throw new HttpError(404, 'interview not found')
+  const interview = ownInterview(user.id, id)
   if (interview.status === 'finished') return c.json(interview.report)
   if (interview.transcript.length < 2)
     throw new HttpError(400, 'not enough conversation to evaluate — answer at least one question')
 
-  const profile = db.getProfile(interview.profile_id)
-  if (!profile) throw new HttpError(404, 'profile not found')
+  const profile = ownProfile(user.id, interview.profile_id)
 
   const raw = await chat(
     cfg,
@@ -298,9 +362,10 @@ api.post('/interviews/:id/finish', async (c) => {
   return c.json(report)
 })
 
-api.get('/interviews', (c) =>
-  c.json(
-    db.listInterviews().map((i) => ({
+api.get('/interviews', (c) => {
+  const user = requireUser(c)
+  return c.json(
+    db.listInterviewsForUser(user.id).map((i) => ({
       id: i.id,
       mode: i.mode,
       kind: i.kind,
@@ -310,34 +375,40 @@ api.get('/interviews', (c) =>
       overall_score: i.report?.overall_score ?? null,
       level_estimate: i.report?.level_estimate ?? null,
     })),
-  ),
-)
+  )
+})
 
 api.get('/interviews/:id', (c) => {
-  const interview = db.getInterview(Number(c.req.param('id')))
-  if (!interview) throw new HttpError(404, 'interview not found')
+  const user = requireUser(c)
+  const interview = ownInterview(user.id, Number(c.req.param('id')))
   return c.json(interview)
 })
 
 // ── weaknesses ──────────────────────────────────────────────────────
 
 api.get('/weaknesses', (c) => {
-  const profile = db.latestProfile()
+  const user = requireUser(c)
+  const profile = db.latestProfile(user.id)
   return c.json(profile ? db.listWeaknesses(profile.id) : [])
 })
 
 api.post('/weaknesses/:id/status', async (c) => {
+  const user = requireUser(c)
   const { status } = await parseBody(c, weaknessStatusSchema)
-  db.setWeaknessStatus(Number(c.req.param('id')), status)
+  const weakness = db.getWeakness(Number(c.req.param('id')))
+  if (!weakness) throw new HttpError(404, 'weakness not found')
+  ownProfile(user.id, weakness.profile_id)
+  db.setWeaknessStatus(weakness.id, status)
   return c.json({ ok: true })
 })
 
 // ── progress (gamification) ─────────────────────────────────────────
 
 api.get('/progress', (c) => {
-  const profile = db.latestProfile()
+  const user = requireUser(c)
+  const profile = db.latestProfile(user.id)
   if (!profile) return c.json(null)
-  const interviews = db.listInterviews().filter((i) => i.profile_id === profile.id)
+  const interviews = db.listInterviewsForUser(user.id).filter((i) => i.profile_id === profile.id)
   const weaknesses = db.listWeaknesses(profile.id)
   return c.json(computeProgress(profile, interviews, weaknesses))
 })

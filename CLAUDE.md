@@ -64,16 +64,22 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 senior-bro (npm workspace monorepo)
 ├── server/   Hono + node:sqlite. Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
-│   ├── src/db.ts         sqlite schema & queries (~/.senior-bro/data.db)
-│   ├── src/config.ts     provider+key config (~/.senior-bro/config.json)
-│   ├── src/providers.ts  LLM abstraction: anthropic | openai via fetch
+│   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
+│   ├── src/db.ts         sqlite schema & queries (~/.senior-bro/data.db); users/sessions/
+│   │                     magic_links + per-user provider config + per-user data isolation
+│   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
+│   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
+│   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
+│   ├── src/mailer.ts     dependency-free magic-link delivery (log + optional webhook)
+│   ├── src/http.ts       shared HttpError
+│   ├── src/providers.ts  LLM abstraction: anthropic | openai | claude-cli | codex-cli | mock
 │   ├── src/prompts.ts    ALL system prompts & evaluation rubrics
 │   ├── src/skills.ts     loads skills/*.md company packs
-│   └── src/routes.ts     REST API
+│   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode)
 ├── web/      React + Vite SPA
 │   ├── src/voice.ts      Web Speech API wrapper (STT + TTS)
-│   ├── src/api.ts        typed client for server API
-│   └── src/pages/        Setup → Profile → Calibration → Interview → Report → Dashboard
+│   ├── src/api.ts        typed client for server API (cookie-authed)
+│   └── src/pages/        Login(hosted) → Setup → Profile → Calibration → Interview → Report → Dashboard
 ├── skills/   company interview packs (markdown + frontmatter)
 └── memory/   milestone log (INDEX.md + one file per milestone)
 ```

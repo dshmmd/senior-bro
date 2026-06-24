@@ -76,6 +76,7 @@ export interface Progress {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
     ...init,
   })
   if (!res.ok) {
@@ -96,6 +97,7 @@ async function ssePost<T>(path: string, body: unknown, onDelta: (text: string) =
   const res = await fetch(`/api${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+    credentials: 'same-origin',
     body: JSON.stringify(body),
   })
   if (!res.ok || !res.body) {
@@ -136,8 +138,21 @@ async function ssePost<T>(path: string, body: unknown, onDelta: (text: string) =
   return result.value
 }
 
+export interface Health {
+  ok: boolean
+  mode: 'local' | 'hosted'
+  authed: boolean
+  user: { email: string | null; role: 'user' | 'admin' } | null
+  configured: boolean
+}
+
 export const api = {
-  health: () => request<{ ok: boolean; configured: boolean }>('/health'),
+  health: () => request<Health>('/health'),
+  requestMagicLink: (email: string) =>
+    post<{ ok: boolean; sent: boolean; link?: string }>('/auth/request', { email }),
+  verifyMagicLink: (token: string) =>
+    post<{ ok: boolean; email: string | null; role: 'user' | 'admin' }>('/auth/verify', { token }),
+  logout: () => post<{ ok: boolean }>('/auth/logout', {}),
   getConfig: () => request<{ provider?: string; model?: string; hasKey: boolean }>('/config'),
   saveConfig: (provider: string, apiKey: string, model?: string) =>
     post<{ ok: boolean }>('/config', { provider, apiKey, model }),
