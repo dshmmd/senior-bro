@@ -1,5 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { spawn } from 'node:child_process'
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import type { AppConfig } from './config.js'
 
 export interface ChatMessage {
@@ -130,7 +134,13 @@ interface SpawnResult {
 }
 
 /** Spawn a CLI, write `input` to stdin, stream stdout to onDelta, resolve with the full output. */
-function runCli(cmd: string, args: string[], input: string, onDelta?: OnDelta): Promise<SpawnResult> {
+function runCli(
+  cmd: string,
+  args: string[],
+  input: string,
+  onDelta?: OnDelta,
+  cwd?: string,
+): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     // CLI providers are local-only and bill the user's own subscription. Strip any
     // API-key / base-url overrides so the CLI uses its logged-in subscription auth.
@@ -141,7 +151,7 @@ function runCli(cmd: string, args: string[], input: string, onDelta?: OnDelta): 
     delete env.OPENAI_API_KEY
     delete env.OPENAI_BASE_URL
 
-    const child = spawn(cmd, args, { env })
+    const child = spawn(cmd, args, { env, cwd })
     let stdout = ''
     let stderr = ''
     child.stdout.setEncoding('utf8')
@@ -174,11 +184,17 @@ async function chatClaudeCli(
   messages: ChatMessage[],
   onDelta?: OnDelta,
 ): Promise<string> {
-  const args = ['-p', '--output-format', 'text', '--append-system-prompt', system]
+  // `claude -p` is Claude Code (a coding agent). Two things are essential:
+  //   --system-prompt  fully REPLACES Claude Code's coding-assistant persona with
+  //                    ours (--append-system-prompt only appends, so it stays "Claude
+  //                    Code" and refuses to roleplay as an interviewer).
+  //   --tools ""       disables all tools so technical/coding questions don't make it
+  //                    try to read files or run commands instead of just asking.
+  // We also run in a neutral cwd so it has no repository/project context to leak.
+  const args = ['-p', '--output-format', 'text', '--tools', '', '--system-prompt', system]
   if (cfg.model) args.push('--model', cfg.model)
-  // We don't pass the system via the prompt body — only the conversation.
   const prompt = renderConversation('', messages)
-  const { code, stdout, stderr } = await runCli('claude', args, prompt, onDelta)
+  const { code, stdout, stderr } = await runCli('claude', args, prompt, onDelta, os.tmpdir())
   if (code !== 0 || !stdout.trim()) {
     throw new Error(
       `claude CLI failed (exit ${code ?? '?'}). ${stderr.trim().slice(0, 300) || CLI_HELP['claude-cli']}`,
@@ -193,16 +209,31 @@ async function chatCodexCli(
   messages: ChatMessage[],
   onDelta?: OnDelta,
 ): Promise<string> {
-  const args = ['exec', '--skip-git-repo-check']
-  if (cfg.model) args.push('--model', cfg.model)
+  // `codex exec` is also a coding agent. The persona is steered entirely by the
+  // prompt (no system-prompt flag), so we fold our system text into the prompt.
+  // Its stdout interleaves session framing ("codex", "tokens used", …) and echoes
+  // the reply, so we capture the clean final message via -o <file> instead of
+  // streaming raw stdout. Read-only sandbox + neutral cwd keep it from touching disk.
+  const outFile = path.join(os.tmpdir(), `sb-codex-${crypto.randomBytes(6).toString('hex')}.txt`)
+  const args = ['exec', '--skip-git-repo-check', '-s', 'read-only', '-C', os.tmpdir(), '-o', outFile]
+  if (cfg.model) args.push('-c', `model=${cfg.model}`)
   const prompt = renderConversation(system, messages)
-  const { code, stdout, stderr } = await runCli('codex', args, prompt, onDelta)
-  if (code !== 0 || !stdout.trim()) {
+  const { code, stderr } = await runCli('codex', args, prompt, undefined, os.tmpdir())
+  let reply = ''
+  try {
+    reply = fs.readFileSync(outFile, 'utf8').trim()
+  } catch {
+    // outFile missing → codex never produced a final message
+  } finally {
+    fs.rmSync(outFile, { force: true })
+  }
+  if (code !== 0 || !reply) {
     throw new Error(
       `codex CLI failed (exit ${code ?? '?'}). ${stderr.trim().slice(0, 300) || CLI_HELP['codex-cli']}`,
     )
   }
-  return stdout.trim()
+  if (onDelta) onDelta(reply) // emit once (codex output isn't cleanly streamable)
+  return reply
 }
 
 // ── mock provider (tests / dev without a key) ──────────────────────

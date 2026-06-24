@@ -21,9 +21,24 @@ credits. Added two providers that bill the **subscription** via the local CLI:
 
 **Boundaries:** local mode only — the CLI runs on the user's own machine. The
 hosted tier must NOT proxy a customer's subscription (ToS + can't share logins);
-hosted uses API keys / host tokens (Phase 8). Couldn't do a live CLI round-trip in
-the dev sandbox (it injects `ANTHROPIC_BASE_URL`), so the providers are written but
-need a real-machine smoke test: pick "Claude subscription", expect a real interview.
+hosted uses API keys / host tokens (Phase 8).
+
+### Real-machine smoke test (2026-06-24) — found + fixed a blocking bug
+Owner reported CLI subscription mode "couldn't work." Reproduced on the real box:
+the spawn/auth was fine (exit 0, real subscription), but `claude -p` is **Claude
+Code** (a coding agent) and `--append-system-prompt` only *appends* to its persona —
+so it replied as "Claude Code" ("I'm not a human interviewer… what do you want to
+build?") and even saw the repo it ran in. **Fixes in `providers.ts`:**
+- claude-cli: `--append-system-prompt` → **`--system-prompt`** (fully replaces the
+  coding persona) + **`--tools ""`** (no tools) + run in a **neutral cwd** (`os.tmpdir()`).
+- codex-cli: same neutral-cwd, add **`-s read-only`** sandbox, and read the clean final
+  message from **`-o <file>`** (codex stdout interleaves "codex"/"tokens used" framing
+  and echoes the reply, so raw-stdout streaming was garbage); model via `-c model=…`.
+- `runCli()` gained a `cwd` arg.
+Verified end-to-end through the real `chat()` with live credentials: both providers
+now greet + ask a warmup question in character. claude streams; codex emits once.
+NOTE: `claude` lives at `/opt/homebrew/bin/claude` — if the app is launched with a
+PATH that excludes Homebrew, `spawn('claude')` ENOENTs ("Could not launch claude").
 
 ## 2. "continue" rebuilds full context
 
