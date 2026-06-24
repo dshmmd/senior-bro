@@ -51,6 +51,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 - [x] R9: Company interview sources converted into "skill packs" for personalized interviews
 - [x] R10: Installable by non-technical people (brew/npx), paste token, pick provider
 - [x] R11: Provider choice: Claude (primary) and OpenAI
+- [x] R12: Use a subscription (Claude Pro/ChatGPT) via local CLI — no API key (D8)
+- [ ] R13: **Admin panel for a hosted deploy** — admin manages API keys per model;
+  users pick from admin-curated options; usage metering + per-user token limits.
+  See ROADMAP Phase 9 (admin) + Phase 8 (billing). This is the priority bundle the
+  moment we deploy to a host. Highly configurable: adding/removing a model option,
+  swapping its key, or changing a user's quota must be admin-UI actions, no redeploy.
 
 ## Architecture
 

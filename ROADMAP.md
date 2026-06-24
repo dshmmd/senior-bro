@@ -45,6 +45,10 @@ metered usage, fiat + crypto payments.
 - 2026-06-24: owner chose **Phase 6 (gamification)** as the next build — works
   single-user today, highest demo impact. Phase 3 (accounts/hosted) deferred but
   is the gate before any deploy to `95.38.235.93`.
+- 2026-06-24: owner queued the **hosted admin bundle (R13)** as a near-term must for
+  deploy: admin manages per-model API keys, users pick from admin-curated options
+  (no redeploy to change), and usage metering + per-user token limits. Spans
+  Phases 3 → 8 → 9; build the thin vertical slice across them first (see Phase 9 note).
 
 ---
 
@@ -105,17 +109,37 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - [ ] Per-question "explain like I'm new" escape hatch (one tap, no typing)
 - [ ] Post-interview study plan generated from gaps; links into coaching drills
 
-### Phase 8 — Billing & host tokens
-- [ ] Usage metering: tokens in/out per request, priced per model, stored per user (D4)
-- [ ] Subscription plans + quota enforcement; usage dashboard for users
-- [ ] Stripe checkout; crypto checkout via processor; invoices
-- [ ] Margin/analytics report for the owner
+### Phase 8 — Billing & host tokens  ⭐ part of the hosted-deploy priority bundle (R13)
+- [ ] **Usage metering**: capture tokens in/out per request from each provider
+      response, price per model (table maintained by admin), store per user (D4).
+- [ ] **Per-user limits**: hard/soft token (or $) quotas; block or warn at threshold;
+      reset per billing period. Enforced server-side before each model call.
+- [ ] User-facing usage dashboard: tokens burned, % of quota, history by day/model.
+- [ ] Subscription plans + quota tiers; Stripe checkout; crypto checkout via a
+      processor (e.g. Coinbase Commerce); invoices.
+- [ ] Owner margin/analytics report (revenue vs. token cost per user/model).
 
-### Phase 9 — Admin panel
-- [ ] Admin auth + RBAC; everything audited
-- [ ] Manage: models/providers/defaults, skill packs (CRUD + publish), users, quotas, usage analytics
-- [ ] Agent console (D5): admin types intent → agent proposes change as a diff/PR → admin approves → deploy
-- [ ] Kill switches: per-provider, per-feature flags
+### Phase 9 — Admin panel  ⭐ hosted-deploy priority bundle (R13) — first thing after Phase 3
+The owner's explicit "first of all, when deployed on a host" requirements. Everything
+here must be **configurable from the admin UI with no redeploy** ("configurable as fuck").
+- [ ] Admin auth + RBAC; every admin action audited.
+- [ ] **Model & API-key management**: admin registers providers + models, stores the
+      API key for each (encrypted at rest), sets which are enabled, default, and their
+      price/limits. Add/rotate/remove a key or model = admin-UI action, takes effect live.
+- [ ] **User-facing model picker driven by admin config**: users choose only from the
+      options the admin has enabled (per plan/tier). No model/provider is hardcoded in
+      the client — the available list comes from the server.
+- [ ] Usage & limits console: see each user's token burn, set/adjust quotas, suspend users.
+- [ ] Manage skill packs (CRUD + publish) and feature flags / per-provider kill switches.
+- [ ] Agent console (D5): admin types intent → agent proposes change as a diff/PR →
+      admin approves → deploy. Never live self-modification in prod.
+
+> **Sequencing note for next agents:** R13 (admin keys + user-selectable options +
+> metering/limits) spans Phase 3 (accounts/isolation, prerequisite), Phase 8 (metering
+> & limits), and Phase 9 (admin UI + model/key config). When the owner says "do the
+> admin panel," build the thin vertical slice across all three: accounts → admin
+> registers a model+key → user picks from enabled models → each call is metered and
+> quota-checked. Ship that slice before the fancier billing/crypto/agent-console parts.
 
 ### Phase 10 — Content & skills at scale
 - [ ] Skill-pack generator: company name → web research → drafted `skills/<company>.md` → owner review queue
