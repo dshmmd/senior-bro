@@ -22,10 +22,26 @@ provider you choose (Claude or OpenAI).
 6. **Coaching drills** — one-click focused sessions that attack a single weakness
    until you mark it resolved. Future interviews automatically probe your open weaknesses.
 
+## Powering it — no API credits required
+
+Senior Bro can run on a **subscription you already pay for**, not just an API key:
+
+| Option | What you need | Cost |
+| --- | --- | --- |
+| **Claude subscription** | The [`claude`](https://docs.claude.com/claude-code) CLI installed and signed in with your **Claude Pro/Max** plan | included in your plan |
+| **ChatGPT / Codex** | The `codex` CLI installed and signed in with your **ChatGPT/Codex** plan | included in your plan |
+| Claude API key | A key from [console.anthropic.com](https://console.anthropic.com) | pay-as-you-go |
+| OpenAI API key | A key from [platform.openai.com](https://platform.openai.com) | pay-as-you-go |
+
+For the subscription options, just run `claude` (or `codex`) in a terminal once,
+sign in, then pick that option in setup — Senior Bro drives the CLI in headless
+mode, so your interviews bill your subscription with **zero API spend**. This
+works in local mode (the CLI runs on your own machine).
+
 ## Requirements
 
 - **Node.js ≥ 22.5** (`node --version`)
-- An API key from [Anthropic](https://console.anthropic.com) (recommended) or OpenAI
+- One of the four power options above
 - For voice mode: Chrome, Edge, or Safari (uses the built-in Web Speech API — free, no extra key)
 
 ## Run it (production mode)
@@ -38,7 +54,7 @@ npm run build
 npm start
 ```
 
-Open **http://localhost:4747**, paste your API key, and start interviewing.
+Open **http://localhost:4747**, pick how to power it (a subscription or an API key), and start interviewing.
 
 ## Run it (development mode)
 

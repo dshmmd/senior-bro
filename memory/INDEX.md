@@ -16,3 +16,7 @@ One entry per completed milestone. Read this before working on the repo.
   constellation skill map (canvas), `GET /api/progress`, medals/streak/heatmap/level
   trail. Built out of order at owner request. Owner decided dual+hosted-first
   (deploy target 95.38.235.93, gated on Phase 3).
+- [2026-06-24 — Subscription auth + continuity](2026-06-24-subscription-auth-and-continuity.md) —
+  `claude-cli`/`codex-cli` providers so a Pro/ChatGPT subscription powers the app
+  with no API credits (local only; D8). CLAUDE.md "▶ START HERE" + `/continue`
+  command so any session resumes with full context.

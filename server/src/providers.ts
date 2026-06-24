@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { spawn } from 'node:child_process'
 import type { AppConfig } from './config.js'
 
 export interface ChatMessage {
@@ -24,6 +25,10 @@ export async function chat(
       return chatAnthropic(cfg, system, messages, maxTokens, onDelta)
     case 'openai':
       return chatOpenAI(cfg, system, messages, maxTokens, onDelta)
+    case 'claude-cli':
+      return chatClaudeCli(cfg, system, messages, onDelta)
+    case 'codex-cli':
+      return chatCodexCli(cfg, system, messages, onDelta)
     case 'mock':
       return chatMock(system, messages, onDelta)
   }
@@ -106,6 +111,98 @@ async function chatOpenAI(
     }
   }
   return full
+}
+
+// ── CLI providers (use a local subscription, no API key) ───────────
+
+/** Render system + transcript into one prompt for a single-shot CLI call. */
+function renderConversation(system: string, messages: ChatMessage[]): string {
+  const turns = messages
+    .map((m) => `${m.role === 'assistant' ? 'INTERVIEWER' : 'CANDIDATE'}: ${m.content}`)
+    .join('\n\n')
+  return `${system}\n\n=== CONVERSATION SO FAR ===\n${turns}\n\n=== YOUR REPLY (as INTERVIEWER, plain text only) ===\n`
+}
+
+interface SpawnResult {
+  code: number | null
+  stdout: string
+  stderr: string
+}
+
+/** Spawn a CLI, write `input` to stdin, stream stdout to onDelta, resolve with the full output. */
+function runCli(cmd: string, args: string[], input: string, onDelta?: OnDelta): Promise<SpawnResult> {
+  return new Promise((resolve, reject) => {
+    // CLI providers are local-only and bill the user's own subscription. Strip any
+    // API-key / base-url overrides so the CLI uses its logged-in subscription auth.
+    const env = { ...process.env }
+    delete env.ANTHROPIC_API_KEY
+    delete env.ANTHROPIC_AUTH_TOKEN
+    delete env.ANTHROPIC_BASE_URL
+    delete env.OPENAI_API_KEY
+    delete env.OPENAI_BASE_URL
+
+    const child = spawn(cmd, args, { env })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk
+      if (onDelta) onDelta(chunk)
+    })
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => (stderr += chunk))
+    child.on('error', (err) => {
+      reject(new Error(`Could not launch "${cmd}". Is it installed and on PATH? (${err.message})`))
+    })
+    child.on('close', (code) => {
+      resolve({ code, stdout, stderr })
+    })
+    child.stdin.end(input)
+  })
+}
+
+const CLI_HELP = {
+  'claude-cli':
+    'Open a terminal, run `claude` once and sign in with your Claude Pro/Max subscription, then retry.',
+  'codex-cli':
+    'Open a terminal, run `codex` once and sign in with your ChatGPT/Codex subscription, then retry.',
+}
+
+async function chatClaudeCli(
+  cfg: AppConfig,
+  system: string,
+  messages: ChatMessage[],
+  onDelta?: OnDelta,
+): Promise<string> {
+  const args = ['-p', '--output-format', 'text', '--append-system-prompt', system]
+  if (cfg.model) args.push('--model', cfg.model)
+  // We don't pass the system via the prompt body — only the conversation.
+  const prompt = renderConversation('', messages)
+  const { code, stdout, stderr } = await runCli('claude', args, prompt, onDelta)
+  if (code !== 0 || !stdout.trim()) {
+    throw new Error(
+      `claude CLI failed (exit ${code ?? '?'}). ${stderr.trim().slice(0, 300) || CLI_HELP['claude-cli']}`,
+    )
+  }
+  return stdout.trim()
+}
+
+async function chatCodexCli(
+  cfg: AppConfig,
+  system: string,
+  messages: ChatMessage[],
+  onDelta?: OnDelta,
+): Promise<string> {
+  const args = ['exec', '--skip-git-repo-check']
+  if (cfg.model) args.push('--model', cfg.model)
+  const prompt = renderConversation(system, messages)
+  const { code, stdout, stderr } = await runCli('codex', args, prompt, onDelta)
+  if (code !== 0 || !stdout.trim()) {
+    throw new Error(
+      `codex CLI failed (exit ${code ?? '?'}). ${stderr.trim().slice(0, 300) || CLI_HELP['codex-cli']}`,
+    )
+  }
+  return stdout.trim()
 }
 
 // ── mock provider (tests / dev without a key) ──────────────────────

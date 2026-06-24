@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
-import { DEFAULT_MODELS, loadConfig, saveConfig, type AppConfig } from './config.js'
+import { DEFAULT_MODELS, isCliProvider, loadConfig, saveConfig, type AppConfig } from './config.js'
 import * as db from './db.js'
 import { chat, extractJson, validateKey, type ChatMessage } from './providers.js'
 import { getSkillPack, loadSkillPacks } from './skills.js'
@@ -54,11 +54,16 @@ api.onError((err, c) => {
 
 // ── schemas ─────────────────────────────────────────────────────────
 
-const configSchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'mock']),
-  apiKey: z.string().min(4).max(400),
-  model: z.string().max(120).optional(),
-})
+const configSchema = z
+  .object({
+    provider: z.enum(['anthropic', 'openai', 'claude-cli', 'codex-cli', 'mock']),
+    apiKey: z.string().max(400).optional(),
+    model: z.string().max(120).optional(),
+  })
+  .refine((v) => isCliProvider(v.provider) || (v.apiKey?.trim().length ?? 0) >= 4, {
+    message: 'API key is required for this provider',
+    path: ['apiKey'],
+  })
 
 const profileSchema = z.object({
   role: z.string().trim().min(2).max(200),
@@ -100,11 +105,14 @@ api.post('/config', async (c) => {
   const body = await parseBody(c, configSchema)
   const cfg: AppConfig = {
     provider: body.provider,
-    apiKey: body.apiKey.trim(),
+    apiKey: body.apiKey?.trim() ?? '',
     model: body.model?.trim() ?? DEFAULT_MODELS[body.provider],
   }
   const check = await validateKey(cfg)
-  if (!check.ok) throw new HttpError(400, `API key validation failed: ${check.error ?? 'unknown'}`)
+  if (!check.ok) {
+    const what = isCliProvider(cfg.provider) ? 'CLI check' : 'API key validation'
+    throw new HttpError(400, `${what} failed: ${check.error ?? 'unknown'}`)
+  }
   saveConfig(cfg)
   return c.json({ ok: true, provider: cfg.provider, model: cfg.model })
 })

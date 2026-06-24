@@ -377,6 +377,12 @@ tr.clickable:hover {
   background: var(--accent);
 }
 
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
 .offline-banner {
   background: #4d2b2b;
   color: #ffb3b3;

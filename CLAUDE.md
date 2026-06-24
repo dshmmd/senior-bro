@@ -1,8 +1,27 @@
 # Senior Bro — AI Interview Coach
 
-Local-first, bring-your-own-key AI interview platform. The user tells us the job
-they want, we calibrate their level, run a realistic voice-or-text interview,
-detect weaknesses, and coach them until they're ready.
+Local-first AI interview platform. The user tells us the job they want, we
+calibrate their level, run a realistic voice-or-text interview, detect
+weaknesses, and coach them until they're ready. Powered by the user's own API
+key **or their existing Claude/ChatGPT subscription** (via the local CLI).
+
+## ▶ START HERE — when the owner says "continue"
+
+Do this, in order, before writing any code. It rebuilds full context in ~1 min:
+
+1. Read **`ROADMAP.md`** top-to-bottom — it has the vision, the decisions
+   (D1–D8), open questions, the phase checklist, and the owner-directed build order.
+2. Read **`memory/INDEX.md`** and the newest `memory/*.md` entry — what's done, why,
+   and the gotchas.
+3. Run **`make check`** to confirm the tree is green before changing anything.
+4. Pick the work: honor the "Build order (owner-directed)" note in ROADMAP if
+   present; otherwise take the lowest unfinished phase. Each phase ends at an
+   **owner-review gate** — finish the phase, verify, push, then stop and summarize.
+5. As you finish items: tick `[x]` in ROADMAP, add a `memory/` entry, keep this
+   file's architecture section current. Verify with `make check` (+ `make e2e` for
+   UI flows) before every commit. Only commit/push when the work is complete & green.
+
+Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 
 ## How to work in this repo (agent rules)
 
@@ -11,7 +30,8 @@ detect weaknesses, and coach them until they're ready.
 1. Read `memory/INDEX.md` before starting any task — it records what is done and why.
 2. When a plan item below is completed, mark it `[x]` here AND append a short
    entry to `memory/` (one file per milestone, linked from `memory/INDEX.md`).
-3. Verification gate before any commit: `npm run typecheck && npm run build`.
+3. Verification gate before any commit: `make check` (lint + typecheck + build + smoke).
+   Run `make e2e` too when a UI flow changed.
 4. One language everywhere: TypeScript. No new runtime deps without a strong reason —
    we deliberately use `node:sqlite` and raw `fetch` to keep the install surface tiny.
 5. User-facing strings live in the React components; prompts live in `server/src/prompts.ts`.
