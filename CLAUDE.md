@@ -13,7 +13,10 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > one file"), admin-managed versioned prompts (D12, prompts leave `prompts.ts`). Read
 > ROADMAP Phases 11–16 before new work. **Phases 12 & 13 ✅ shipped** (12: resumable interviews +
 > returning-user "welcome back" + DB-level FKs/indexes; 13: plans/gating + free level-check +
-> mocked checkout + invite-code credit); **next up = Phase 14 (admin-managed versioned prompts + guardrails)**.
+> mocked checkout + invite-code credit). **Phase 16 voice** (R20) shipped (editable transcript;
+> native audio deferred). **Phase 17 partial:** R21 (Back nav) + R24 (multi-profile) ✅; **remaining
+> R22 (fuzzy/tiered target) + R23 (evidence-gated knowledge)**. **Next up = Phase 14 (versioned
+> prompts + guardrails), or finish Phase 17 R22/R23.**
 
 ## ▶ START HERE — when the owner says "continue"
 
