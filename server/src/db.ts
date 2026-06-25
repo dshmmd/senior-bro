@@ -16,7 +16,27 @@ export interface User {
   id: number
   email: string | null
   role: 'user' | 'admin'
+  model_id: number | null
+  token_quota: number | null
   created_at: string
+}
+
+export interface ModelOption {
+  id: number
+  label: string
+  provider: string
+  model: string
+  enabled: boolean
+  is_default: boolean
+  price_in: number // USD per 1M input tokens
+  price_out: number // USD per 1M output tokens
+  has_key: boolean
+}
+
+export interface UsageEvent {
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
 }
 
 export interface Profile {
@@ -139,6 +159,29 @@ export function initDb(): void {
       source_interview_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS models (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      api_key_enc TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      price_in REAL NOT NULL DEFAULT 0,
+      price_out REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS usage_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      model_id INTEGER,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
   migrate()
 }
@@ -149,6 +192,11 @@ function migrate(): void {
   if (!cols.includes('user_id')) {
     db.exec('ALTER TABLE profiles ADD COLUMN user_id INTEGER')
   }
+
+  // Hosted host-key/metering columns on users (added after Phase 3's users table).
+  const userCols = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name)
+  if (!userCols.includes('model_id')) db.exec('ALTER TABLE users ADD COLUMN model_id INTEGER')
+  if (!userCols.includes('token_quota')) db.exec('ALTER TABLE users ADD COLUMN token_quota INTEGER')
 
   // Seed the implicit local owner (also the bootstrap admin). Stable id so local
   // mode never has to authenticate.
@@ -320,6 +368,8 @@ function rowToUser(r: Record<string, unknown>): User {
     id: r.id as number,
     email: r.email as string | null,
     role: r.role as 'user' | 'admin',
+    model_id: (r.model_id as number | null) ?? null,
+    token_quota: (r.token_quota as number | null) ?? null,
     created_at: r.created_at as string,
   }
 }
@@ -396,10 +446,186 @@ export function getUserConfig(userId: number): AppConfig | null {
 }
 
 export function setUserConfig(userId: number, cfg: AppConfig): void {
-  db.prepare('UPDATE users SET provider = ?, model = ?, api_key_enc = ? WHERE id = ?').run(
+  // Choosing a personal provider/key clears any admin-curated model selection.
+  db.prepare('UPDATE users SET provider = ?, model = ?, api_key_enc = ?, model_id = NULL WHERE id = ?').run(
     cfg.provider,
     cfg.model,
     cfg.apiKey ? encryptSecret(cfg.apiKey) : null,
     userId,
   )
+}
+
+export function setUserRole(userId: number, role: 'user' | 'admin'): void {
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId)
+}
+
+export function setUserModelChoice(userId: number, modelId: number): void {
+  // Selecting a curated model clears the personal BYOK key (host key is used instead).
+  db.prepare(
+    `UPDATE users SET model_id = ?, provider = NULL, model = NULL, api_key_enc = NULL WHERE id = ?`,
+  ).run(modelId, userId)
+}
+
+export function setUserQuota(userId: number, quota: number | null): void {
+  db.prepare('UPDATE users SET token_quota = ? WHERE id = ?').run(quota, userId)
+}
+
+export function listUsers(): User[] {
+  const rows = db.prepare('SELECT * FROM users ORDER BY id ASC').all() as Record<string, unknown>[]
+  return rows.map(rowToUser)
+}
+
+// ── model catalog (admin-curated providers + keys) ───────────────────
+
+function rowToModel(r: Record<string, unknown>): ModelOption {
+  return {
+    id: r.id as number,
+    label: r.label as string,
+    provider: r.provider as string,
+    model: r.model as string,
+    enabled: Boolean(r.enabled),
+    is_default: Boolean(r.is_default),
+    price_in: r.price_in as number,
+    price_out: r.price_out as number,
+    has_key: Boolean(r.api_key_enc),
+  }
+}
+
+export function listModels(enabledOnly = false): ModelOption[] {
+  const sql = `SELECT * FROM models ${enabledOnly ? 'WHERE enabled = 1' : ''} ORDER BY is_default DESC, id ASC`
+  return (db.prepare(sql).all() as Record<string, unknown>[]).map(rowToModel)
+}
+
+export function getModel(id: number): ModelOption | null {
+  const row = db.prepare('SELECT * FROM models WHERE id = ?').get(id) as Record<string, unknown> | undefined
+  return row ? rowToModel(row) : null
+}
+
+/** Resolve a catalog model into a usable AppConfig (decrypts the host key). */
+export function modelConfig(id: number): { cfg: AppConfig; option: ModelOption } | null {
+  const row = db.prepare('SELECT * FROM models WHERE id = ?').get(id) as Record<string, unknown> | undefined
+  if (!row) return null
+  const option = rowToModel(row)
+  const apiKey = row.api_key_enc ? decryptSecret(row.api_key_enc as string) : ''
+  return { option, cfg: { provider: option.provider as Provider, apiKey, model: option.model } }
+}
+
+export function createModel(m: {
+  label: string
+  provider: string
+  model: string
+  apiKey: string
+  enabled: boolean
+  is_default: boolean
+  price_in: number
+  price_out: number
+}): ModelOption {
+  if (m.is_default) db.prepare('UPDATE models SET is_default = 0').run()
+  const row = db
+    .prepare(
+      `INSERT INTO models (label, provider, model, api_key_enc, enabled, is_default, price_in, price_out)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+    )
+    .get(
+      m.label,
+      m.provider,
+      m.model,
+      m.apiKey ? encryptSecret(m.apiKey) : null,
+      m.enabled ? 1 : 0,
+      m.is_default ? 1 : 0,
+      m.price_in,
+      m.price_out,
+    ) as Record<string, unknown>
+  return rowToModel(row)
+}
+
+export function updateModel(
+  id: number,
+  patch: Partial<{
+    label: string
+    enabled: boolean
+    is_default: boolean
+    price_in: number
+    price_out: number
+    apiKey: string // '' leaves the existing key untouched
+  }>,
+): ModelOption | null {
+  const current = db.prepare('SELECT * FROM models WHERE id = ?').get(id) as
+    | Record<string, unknown>
+    | undefined
+  if (!current) return null
+  if (patch.is_default) db.prepare('UPDATE models SET is_default = 0').run()
+  const next = {
+    label: patch.label ?? (current.label as string),
+    enabled: patch.enabled ?? Boolean(current.enabled),
+    is_default: patch.is_default ?? Boolean(current.is_default),
+    price_in: patch.price_in ?? (current.price_in as number),
+    price_out: patch.price_out ?? (current.price_out as number),
+    api_key_enc: patch.apiKey ? encryptSecret(patch.apiKey) : (current.api_key_enc as string | null),
+  }
+  db.prepare(
+    `UPDATE models SET label = ?, enabled = ?, is_default = ?, price_in = ?, price_out = ?, api_key_enc = ?
+     WHERE id = ?`,
+  ).run(
+    next.label,
+    next.enabled ? 1 : 0,
+    next.is_default ? 1 : 0,
+    next.price_in,
+    next.price_out,
+    next.api_key_enc,
+    id,
+  )
+  return getModel(id)
+}
+
+export function deleteModel(id: number): void {
+  db.prepare('DELETE FROM models WHERE id = ?').run(id)
+  db.prepare('UPDATE users SET model_id = NULL WHERE model_id = ?').run(id)
+}
+
+// ── usage metering & quotas ──────────────────────────────────────────
+
+export function recordUsage(e: {
+  userId: number
+  modelId: number | null
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}): void {
+  db.prepare(
+    `INSERT INTO usage_events (user_id, model_id, provider, model, input_tokens, output_tokens, cost_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(e.userId, e.modelId, e.provider, e.model, e.inputTokens, e.outputTokens, e.costUsd)
+}
+
+/** Total tokens (in+out) a user has consumed — the figure quotas are checked against. */
+export function tokensUsed(userId: number): number {
+  const row = db
+    .prepare('SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS n FROM usage_events WHERE user_id = ?')
+    .get(userId) as { n: number }
+  return row.n
+}
+
+export interface UsageSummary {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  cost_usd: number
+  events: number
+}
+
+export function usageSummary(userId: number): UsageSummary {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,
+              COALESCE(SUM(output_tokens),0) AS output_tokens,
+              COALESCE(SUM(input_tokens + output_tokens),0) AS total_tokens,
+              COALESCE(SUM(cost_usd),0) AS cost_usd,
+              COUNT(*) AS events
+       FROM usage_events WHERE user_id = ?`,
+    )
+    .get(userId) as unknown as UsageSummary
+  return row
 }

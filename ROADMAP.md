@@ -51,6 +51,10 @@ metered usage, fiat + crypto payments.
   deploy: admin manages per-model API keys, users pick from admin-curated options
   (no redeploy to change), and usage metering + per-user token limits. Spans
   Phases 3 → 8 → 9; build the thin vertical slice across them first (see Phase 9 note).
+- 2026-06-25: **R13 vertical slice landed** (Phase 3 accounts + Phase 9 admin model/key
+  mgmt + Phase 8 metering/quota). The hosted-deploy bundle is functional end-to-end.
+  Next candidates: billing/checkout (Phase 8 remainder), or the deferred personalization/
+  resume/teaching phases (4/5/7). Ask the owner which to take at the next gate.
 
 ---
 
@@ -126,29 +130,39 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - [ ] Post-interview study plan generated from gaps; links into coaching drills
 
 ### Phase 8 — Billing & host tokens  ⭐ part of the hosted-deploy priority bundle (R13)
-- [ ] **Usage metering**: capture tokens in/out per request from each provider
-      response, price per model (table maintained by admin), store per user (D4).
-- [ ] **Per-user limits**: hard/soft token (or $) quotas; block or warn at threshold;
-      reset per billing period. Enforced server-side before each model call.
-- [ ] User-facing usage dashboard: tokens burned, % of quota, history by day/model.
+- [x] **Usage metering**: capture tokens in/out per request from each provider
+      response, price per model (admin-maintained `models` table), store per user (D4).
+      `usage_events` ledger; `runModel()` in routes records every call (cost from price).
+- [x] **Per-user limits**: token quota per user; enforced server-side before each
+      host-key call (402 when exhausted). BYOK calls are recorded but never blocked.
+      (Soft warnings + per-period reset still TODO — current quota is a lifetime cap.)
+- [x] User-facing usage readout: `GET /api/usage` (tokens in/out, cost, vs quota).
+      A richer day/model history dashboard is still TODO.
 - [ ] Subscription plans + quota tiers; Stripe checkout; crypto checkout via a
       processor (e.g. Coinbase Commerce); invoices.
 - [ ] Owner margin/analytics report (revenue vs. token cost per user/model).
+- Shipped 2026-06-25 as the metering half of the R13 vertical slice (see Phase 9).
 
 ### Phase 9 — Admin panel  ⭐ hosted-deploy priority bundle (R13) — first thing after Phase 3
 The owner's explicit "first of all, when deployed on a host" requirements. Everything
 here must be **configurable from the admin UI with no redeploy** ("configurable as fuck").
-- [ ] Admin auth + RBAC; every admin action audited.
-- [ ] **Model & API-key management**: admin registers providers + models, stores the
-      API key for each (encrypted at rest), sets which are enabled, default, and their
-      price/limits. Add/rotate/remove a key or model = admin-UI action, takes effect live.
-- [ ] **User-facing model picker driven by admin config**: users choose only from the
-      options the admin has enabled (per plan/tier). No model/provider is hardcoded in
-      the client — the available list comes from the server.
-- [ ] Usage & limits console: see each user's token burn, set/adjust quotas, suspend users.
+- [x] Admin auth + RBAC (local owner is admin; hosted admins via `SENIORBRO_ADMIN_EMAILS`).
+      `requireAdmin` guard on every `/admin/*` route. (Full audit log still TODO.)
+- [x] **Model & API-key management**: admin registers providers + models, stores the
+      API key for each (encrypted at rest), sets enabled/default + per-Mtok price.
+      Add/rotate/remove = admin-UI action, takes effect live (no redeploy). `models` table,
+      `GET/POST/PATCH/DELETE /api/admin/models`, web `Admin.tsx`.
+- [x] **User-facing model picker driven by admin config**: users pick only from
+      admin-enabled models (`GET /api/models`, `POST /api/models/select`); Setup shows
+      "Use a provided model". No model/provider hardcoded in the client.
+- [x] Usage & limits console: per-user token burn + cost, set/adjust quotas
+      (`GET /api/admin/users`, `POST /api/admin/users/:id/quota`). (Suspend-user still TODO.)
 - [ ] Manage skill packs (CRUD + publish) and feature flags / per-provider kill switches.
 - [ ] Agent console (D5): admin types intent → agent proposes change as a diff/PR →
       admin approves → deploy. Never live self-modification in prod.
+- **R13 vertical slice shipped 2026-06-25** (accounts → admin model+key → user picks →
+  metered & quota-checked). Gate: owner reviews. Remaining: billing/crypto (Phase 8),
+  skill-pack admin + kill switches + agent console (above), audit log, suspend, quota periods.
 
 > **Sequencing note for next agents:** R13 (admin keys + user-selectable options +
 > metering/limits) spans Phase 3 (accounts/isolation, prerequisite), Phase 8 (metering

@@ -13,9 +13,26 @@ export interface ChatMessage {
 
 export type OnDelta = (text: string) => void
 
+/** Token counts for one model call — feeds usage metering & quotas. */
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
+export interface ChatResult {
+  text: string
+  usage: TokenUsage
+}
+
+/** Rough token estimate when a provider doesn't report usage (CLI/mock): ~4 chars/token. */
+function estimateUsage(system: string, messages: ChatMessage[], reply: string): TokenUsage {
+  const input = system.length + messages.reduce((n, m) => n + m.content.length, 0)
+  return { inputTokens: Math.ceil(input / 4), outputTokens: Math.ceil(reply.length / 4) }
+}
+
 /**
  * One call for both modes: pass `onDelta` to receive text chunks as they
- * arrive; the full reply is always returned at the end.
+ * arrive; the full reply + token usage are always returned at the end.
  */
 export async function chat(
   cfg: AppConfig,
@@ -23,7 +40,7 @@ export async function chat(
   messages: ChatMessage[],
   maxTokens = 4096,
   onDelta?: OnDelta,
-): Promise<string> {
+): Promise<ChatResult> {
   switch (cfg.provider) {
     case 'anthropic':
       return chatAnthropic(cfg, system, messages, maxTokens, onDelta)
@@ -44,7 +61,7 @@ async function chatAnthropic(
   messages: ChatMessage[],
   maxTokens: number,
   onDelta?: OnDelta,
-): Promise<string> {
+): Promise<ChatResult> {
   const client = new Anthropic({ apiKey: cfg.apiKey })
   const stream = client.messages.stream({
     model: cfg.model,
@@ -54,10 +71,17 @@ async function chatAnthropic(
   })
   if (onDelta) stream.on('text', onDelta)
   const final = await stream.finalMessage()
-  return final.content
+  const text = final.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map((b) => b.text)
     .join('')
+  return {
+    text,
+    usage: {
+      inputTokens: final.usage.input_tokens,
+      outputTokens: final.usage.output_tokens,
+    },
+  }
 }
 
 async function chatOpenAI(
@@ -66,7 +90,7 @@ async function chatOpenAI(
   messages: ChatMessage[],
   maxTokens: number,
   onDelta?: OnDelta,
-): Promise<string> {
+): Promise<ChatResult> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -77,6 +101,8 @@ async function chatOpenAI(
       model: cfg.model,
       max_completion_tokens: maxTokens,
       stream: Boolean(onDelta),
+      // ask for a usage row on the final SSE chunk when streaming
+      ...(onDelta ? { stream_options: { include_usage: true } } : {}),
       messages: [{ role: 'system', content: system }, ...messages],
     }),
   })
@@ -85,9 +111,21 @@ async function chatOpenAI(
     throw new Error(`OpenAI API error ${res.status}: ${body.slice(0, 500)}`)
   }
 
+  interface OpenAIUsage {
+    prompt_tokens: number
+    completion_tokens: number
+  }
+  const toUsage = (u?: OpenAIUsage): TokenUsage => ({
+    inputTokens: u?.prompt_tokens ?? 0,
+    outputTokens: u?.completion_tokens ?? 0,
+  })
+
   if (!onDelta) {
-    const data = (await res.json()) as { choices: { message: { content: string } }[] }
-    return data.choices[0]?.message.content ?? ''
+    const data = (await res.json()) as {
+      choices: { message: { content: string } }[]
+      usage?: OpenAIUsage
+    }
+    return { text: data.choices[0]?.message.content ?? '', usage: toUsage(data.usage) }
   }
 
   // parse the OpenAI SSE stream
@@ -95,6 +133,7 @@ async function chatOpenAI(
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
+  let usage: OpenAIUsage | undefined
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
@@ -106,7 +145,11 @@ async function chatOpenAI(
       if (!line.startsWith('data:')) continue
       const payload = line.slice(5).trim()
       if (payload === '[DONE]') continue
-      const json = JSON.parse(payload) as { choices: { delta?: { content?: string } }[] }
+      const json = JSON.parse(payload) as {
+        choices: { delta?: { content?: string } }[]
+        usage?: OpenAIUsage
+      }
+      if (json.usage) usage = json.usage
       const delta = json.choices[0]?.delta?.content
       if (delta) {
         full += delta
@@ -114,7 +157,7 @@ async function chatOpenAI(
       }
     }
   }
-  return full
+  return { text: full, usage: toUsage(usage) }
 }
 
 // ── CLI providers (use a local subscription, no API key) ───────────
@@ -183,7 +226,7 @@ async function chatClaudeCli(
   system: string,
   messages: ChatMessage[],
   onDelta?: OnDelta,
-): Promise<string> {
+): Promise<ChatResult> {
   // `claude -p` is Claude Code (a coding agent). Two things are essential:
   //   --system-prompt  fully REPLACES Claude Code's coding-assistant persona with
   //                    ours (--append-system-prompt only appends, so it stays "Claude
@@ -200,7 +243,9 @@ async function chatClaudeCli(
       `claude CLI failed (exit ${code ?? '?'}). ${stderr.trim().slice(0, 300) || CLI_HELP['claude-cli']}`,
     )
   }
-  return stdout.trim()
+  const text = stdout.trim()
+  // CLI subscriptions don't report token counts; estimate so dashboards aren't blank.
+  return { text, usage: estimateUsage(system, messages, text) }
 }
 
 async function chatCodexCli(
@@ -208,7 +253,7 @@ async function chatCodexCli(
   system: string,
   messages: ChatMessage[],
   onDelta?: OnDelta,
-): Promise<string> {
+): Promise<ChatResult> {
   // `codex exec` is also a coding agent. The persona is steered entirely by the
   // prompt (no system-prompt flag), so we fold our system text into the prompt.
   // Its stdout interleaves session framing ("codex", "tokens used", …) and echoes
@@ -233,7 +278,7 @@ async function chatCodexCli(
     )
   }
   if (onDelta) onDelta(reply) // emit once (codex output isn't cleanly streamable)
-  return reply
+  return { text: reply, usage: estimateUsage(system, messages, reply) }
 }
 
 // ── mock provider (tests / dev without a key) ──────────────────────
@@ -292,7 +337,7 @@ function mockReply(system: string, messages: ChatMessage[]): string {
   return MOCK_QUESTIONS[turns - 1] ?? MOCK_QUESTIONS[0]!
 }
 
-async function chatMock(system: string, messages: ChatMessage[], onDelta?: OnDelta): Promise<string> {
+async function chatMock(system: string, messages: ChatMessage[], onDelta?: OnDelta): Promise<ChatResult> {
   const reply = mockReply(system, messages)
   if (onDelta) {
     for (const word of reply.split(/(?<= )/)) {
@@ -300,7 +345,7 @@ async function chatMock(system: string, messages: ChatMessage[], onDelta?: OnDel
       await new Promise((r) => setTimeout(r, 8))
     }
   }
-  return reply
+  return { text: reply, usage: estimateUsage(system, messages, reply) }
 }
 
 // ── helpers ─────────────────────────────────────────────────────────

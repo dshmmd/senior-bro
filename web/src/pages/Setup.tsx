@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { api } from '../api'
+import { useEffect, useState } from 'react'
+import { api, type ModelOption } from '../api'
 
 interface ProviderOption {
   id: string
@@ -45,12 +45,34 @@ const PROVIDERS: ProviderOption[] = [
   },
 ]
 
-export function Setup({ onDone }: { onDone: () => void }) {
-  const [provider, setProvider] = useState<ProviderOption>(PROVIDERS[0]!)
-  const [model, setModel] = useState(PROVIDERS[0]!.defaultModel)
+export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?: boolean }) {
+  // Hosted users can't proxy a personal CLI subscription (D8) — offer only API-key options.
+  const providerOptions = hosted ? PROVIDERS.filter((p) => p.kind !== 'cli') : PROVIDERS
+  const [provider, setProvider] = useState<ProviderOption>(providerOptions[0]!)
+  const [model, setModel] = useState(providerOptions[0]!.defaultModel)
   const [apiKey, setApiKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [curated, setCurated] = useState<ModelOption[]>([])
+
+  useEffect(() => {
+    void api
+      .models()
+      .then((r) => setCurated(r.models))
+      .catch(() => undefined)
+  }, [])
+
+  const pickCurated = async (m: ModelOption) => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.selectModel(m.id)
+      onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setBusy(false)
+    }
+  }
 
   const isCli = provider.kind === 'cli'
 
@@ -73,13 +95,37 @@ export function Setup({ onDone }: { onDone: () => void }) {
     <>
       <h1>Welcome 👋</h1>
       <p className="sub">
-        Senior Bro runs entirely on your machine. Use a subscription you already pay for — no API credits
-        required — or bring your own API key. Nothing leaves your machine except the calls to your chosen AI.
+        {hosted
+          ? 'Pick a ready-to-go model provided for you, or bring your own API key. Your usage is metered against your account.'
+          : 'Senior Bro runs entirely on your machine. Use a subscription you already pay for — no API credits required — or bring your own API key. Nothing leaves your machine except the calls to your chosen AI.'}
       </p>
 
-      <h2>1. How do you want to power it?</h2>
+      {curated.length > 0 && (
+        <>
+          <h2>Use a provided model (no key needed)</h2>
+          <div className="provider-grid">
+            {curated.map((m) => (
+              <div key={m.id} className="card clickable" onClick={() => void pickCurated(m)}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <b>{m.label}</b>
+                  {m.is_default && <span className="badge resolved">recommended</span>}
+                </div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
+                  {m.provider} · {m.model}
+                  {m.price_in > 0 || m.price_out > 0 ? ` — $${m.price_in}/$${m.price_out} per 1M tokens` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="sub" style={{ marginTop: 8 }}>
+            …or bring your own key below.
+          </p>
+        </>
+      )}
+
+      <h2>{curated.length > 0 ? 'Bring your own key' : '1. How do you want to power it?'}</h2>
       <div className="provider-grid">
-        {PROVIDERS.map((p) => (
+        {providerOptions.map((p) => (
           <div
             key={p.id}
             className="card clickable"
@@ -131,7 +177,11 @@ export function Setup({ onDone }: { onDone: () => void }) {
         <>
           <h2>2. Paste your API key</h2>
           <div className="card">
-            <label>API key (stored only in ~/.senior-bro/config.json on your machine)</label>
+            <label>
+              {hosted
+                ? 'API key (encrypted at rest, tied to your account)'
+                : 'API key (stored only in ~/.senior-bro/config.json on your machine)'}
+            </label>
             <input
               type="password"
               value={apiKey}

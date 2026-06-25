@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { api, type Profile } from './api'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
+import { Admin } from './pages/Admin'
 import { Setup } from './pages/Setup'
 import { ProfileSetup } from './pages/ProfileSetup'
 import { Calibration } from './pages/Calibration'
@@ -13,6 +14,7 @@ export type View =
   | { name: 'landing' }
   | { name: 'loading' }
   | { name: 'login' }
+  | { name: 'admin' }
   | { name: 'setup' }
   | { name: 'profile' }
   | { name: 'calibration' }
@@ -36,10 +38,11 @@ export function App() {
     hasMagicToken() || localStorage.getItem('sb-entered') ? { name: 'loading' } : { name: 'landing' },
   )
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [account, setAccount] = useState<{ hosted: boolean; email: string | null }>({
-    hosted: false,
-    email: null,
-  })
+  const [account, setAccount] = useState<{
+    hosted: boolean
+    email: string | null
+    role: 'user' | 'admin' | null
+  }>({ hosted: false, email: null, role: null })
 
   const refresh = useCallback(async () => {
     const health = await api.health().catch(() => null)
@@ -47,7 +50,11 @@ export function App() {
       setView({ name: 'loading' })
       return
     }
-    setAccount({ hosted: health.mode === 'hosted', email: health.user?.email ?? null })
+    setAccount({
+      hosted: health.mode === 'hosted',
+      email: health.user?.email ?? null,
+      role: health.user?.role ?? null,
+    })
     if (health.mode === 'hosted' && !health.authed) {
       setView({ name: 'login' })
       return
@@ -121,6 +128,15 @@ export function App() {
             {profile.level ? ` · ${profile.level}` : ''}
           </div>
         )}
+        {account.role === 'admin' && (
+          <div
+            className="pill clickable"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setView({ name: 'admin' })}
+          >
+            🛠️ admin
+          </div>
+        )}
         <div
           className="pill clickable"
           style={{ cursor: 'pointer' }}
@@ -143,7 +159,8 @@ export function App() {
             </div>
           </div>
         )}
-        {view.name === 'setup' && <Setup onDone={() => void refresh()} />}
+        {view.name === 'admin' && <Admin onBack={() => setView({ name: 'dashboard' })} />}
+        {view.name === 'setup' && <Setup hosted={account.hosted} onDone={() => void refresh()} />}
         {view.name === 'profile' && <ProfileSetup onDone={() => void refresh()} />}
         {view.name === 'calibration' && profile && (
           <Calibration profile={profile} onDone={() => void refresh()} />

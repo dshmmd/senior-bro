@@ -383,6 +383,25 @@ tr.clickable:hover {
   gap: 12px;
 }
 
+/* admin: compact form + small inline buttons */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+button.small,
+.ghost.small {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
 .offline-banner {
   background: #4d2b2b;
   color: #ffb3b3;

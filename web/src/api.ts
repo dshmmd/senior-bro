@@ -146,6 +146,43 @@ export interface Health {
   configured: boolean
 }
 
+export interface ModelOption {
+  id: number
+  label: string
+  provider: string
+  model: string
+  enabled: boolean
+  is_default: boolean
+  price_in: number
+  price_out: number
+  has_key: boolean
+}
+
+export interface UsageInfo {
+  usage: {
+    input_tokens: number
+    output_tokens: number
+    total_tokens: number
+    cost_usd: number
+    events: number
+  }
+  token_quota: number | null
+  tokens_used: number
+}
+
+export interface AdminUserRow {
+  id: number
+  email: string | null
+  role: 'user' | 'admin'
+  model_id: number | null
+  token_quota: number | null
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  cost_usd: number
+  events: number
+}
+
 export const api = {
   health: () => request<Health>('/health'),
   requestMagicLink: (email: string) =>
@@ -189,4 +226,35 @@ export const api = {
   listWeaknesses: () => request<Weakness[]>('/weaknesses'),
   setWeaknessStatus: (id: number, status: string) => post(`/weaknesses/${id}/status`, { status }),
   progress: () => request<Progress | null>('/progress'),
+  // model catalog & usage (user-facing)
+  models: () => request<{ models: ModelOption[]; selected_model_id: number | null }>('/models'),
+  selectModel: (model_id: number) => post<{ ok: boolean }>('/models/select', { model_id }),
+  usage: () => request<UsageInfo>('/usage'),
+  // admin
+  adminListModels: () => request<ModelOption[]>('/admin/models'),
+  adminCreateModel: (m: {
+    label: string
+    provider: string
+    model: string
+    apiKey?: string
+    enabled: boolean
+    is_default: boolean
+    price_in: number
+    price_out: number
+  }) => post<ModelOption>('/admin/models', m),
+  adminUpdateModel: (
+    id: number,
+    patch: Partial<{
+      label: string
+      apiKey: string
+      enabled: boolean
+      is_default: boolean
+      price_in: number
+      price_out: number
+    }>,
+  ) => request<ModelOption>(`/admin/models/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  adminDeleteModel: (id: number) => request<{ ok: boolean }>(`/admin/models/${id}`, { method: 'DELETE' }),
+  adminListUsers: () => request<AdminUserRow[]>('/admin/users'),
+  adminSetQuota: (id: number, token_quota: number | null) =>
+    post<{ ok: boolean }>(`/admin/users/${id}/quota`, { token_quota }),
 }

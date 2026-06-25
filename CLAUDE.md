@@ -52,11 +52,13 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 - [x] R10: Installable by non-technical people (brew/npx), paste token, pick provider
 - [x] R11: Provider choice: Claude (primary) and OpenAI
 - [x] R12: Use a subscription (Claude Pro/ChatGPT) via local CLI — no API key (D8)
-- [ ] R13: **Admin panel for a hosted deploy** — admin manages API keys per model;
+- [x] R13: **Admin panel for a hosted deploy** — admin manages API keys per model;
   users pick from admin-curated options; usage metering + per-user token limits.
-  See ROADMAP Phase 9 (admin) + Phase 8 (billing). This is the priority bundle the
-  moment we deploy to a host. Highly configurable: adding/removing a model option,
-  swapping its key, or changing a user's quota must be admin-UI actions, no redeploy.
+  Vertical slice shipped 2026-06-25 (`server/src/admin.ts`, `models`/`usage_events`
+  tables, `/api/admin/*` + `/api/models` + `/api/usage`, web `Admin.tsx`). Adding/
+  removing a model, swapping its key, or changing a quota are live admin-UI actions
+  (no redeploy). Remaining (ROADMAP Ph 8/9): billing/checkout, audit log, suspend,
+  quota periods, skill-pack admin, agent console.
 
 ## Architecture
 
@@ -66,20 +68,23 @@ senior-bro (npm workspace monorepo)
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
 │   ├── src/db.ts         sqlite schema & queries (~/.senior-bro/data.db); users/sessions/
-│   │                     magic_links + per-user provider config + per-user data isolation
+│   │                     magic_links + per-user config + isolation + models catalog + usage_events
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
+│   ├── src/admin.ts      requireAdmin guard (local owner + SENIORBRO_ADMIN_EMAILS)
 │   ├── src/mailer.ts     dependency-free magic-link delivery (log + optional webhook)
 │   ├── src/http.ts       shared HttpError
 │   ├── src/providers.ts  LLM abstraction: anthropic | openai | claude-cli | codex-cli | mock
+│   │                     (chat() returns text + token usage for metering)
 │   ├── src/prompts.ts    ALL system prompts & evaluation rubrics
 │   ├── src/skills.ts     loads skills/*.md company packs
 │   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode)
 ├── web/      React + Vite SPA
 │   ├── src/voice.ts      Web Speech API wrapper (STT + TTS)
 │   ├── src/api.ts        typed client for server API (cookie-authed)
-│   └── src/pages/        Login(hosted) → Setup → Profile → Calibration → Interview → Report → Dashboard
+│   └── src/pages/        Login(hosted) → Setup → Profile → Calibration → Interview → Report → Dashboard;
+│                         Admin(hosted, role=admin): model/key mgmt, user quotas, usage
 ├── skills/   company interview packs (markdown + frontmatter)
 └── memory/   milestone log (INDEX.md + one file per milestone)
 ```

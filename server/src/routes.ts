@@ -3,12 +3,13 @@ import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import { DEFAULT_MODELS, isCliProvider, type AppConfig } from './config.js'
 import { currentUser, endSession, requireUser, startSession } from './auth.js'
+import { isAdminEmail, requireAdmin } from './admin.js'
 import { randomToken } from './crypto.js'
 import { HttpError } from './http.js'
 import { isHosted, MODE } from './mode.js'
 import { revealLinks, sendMagicLink } from './mailer.js'
 import * as db from './db.js'
-import { chat, extractJson, validateKey, type ChatMessage } from './providers.js'
+import { chat, extractJson, validateKey, type ChatMessage, type OnDelta } from './providers.js'
 import { getSkillPack, loadSkillPacks } from './skills.js'
 import { computeProgress } from './progress.js'
 import {
@@ -22,12 +23,71 @@ import {
 
 export const api = new Hono()
 
-/** Resolve the requesting user, then their provider config — 401/409 otherwise. */
-function requireConfig(c: Context): { user: db.User; cfg: AppConfig } {
-  const user = requireUser(c)
+/**
+ * A resolved model call: which provider/key to use, plus the metering metadata
+ * (catalog id + per-Mtok prices) so usage can be recorded and quotas enforced.
+ * `modelId` is null for BYOK (the user's own key → no host cost, no quota).
+ */
+interface ResolvedCall {
+  cfg: AppConfig
+  modelId: number | null
+  priceIn: number
+  priceOut: number
+}
+
+function resolveCall(user: db.User): ResolvedCall {
+  if (user.model_id !== null) {
+    const resolved = db.modelConfig(user.model_id)
+    if (!resolved?.option.enabled)
+      throw new HttpError(409, 'your selected model is no longer available — pick another')
+    return {
+      cfg: resolved.cfg,
+      modelId: resolved.option.id,
+      priceIn: resolved.option.price_in,
+      priceOut: resolved.option.price_out,
+    }
+  }
   const cfg = db.getUserConfig(user.id)
   if (!cfg) throw new HttpError(409, 'Not configured: set provider and API key first')
-  return { user, cfg }
+  return { cfg, modelId: null, priceIn: 0, priceOut: 0 }
+}
+
+/** Resolve the requesting user + their model call in one step (401/409 otherwise). */
+function requireCall(c: Context): { user: db.User; call: ResolvedCall } {
+  const user = requireUser(c)
+  return { user, call: resolveCall(user) }
+}
+
+/** Block a host-key call when the user is over their token quota (BYOK is never blocked). */
+function enforceQuota(user: db.User, call: ResolvedCall): void {
+  if (call.modelId === null || user.token_quota === null) return
+  if (db.tokensUsed(user.id) >= user.token_quota)
+    throw new HttpError(402, 'token quota reached — contact the admin to raise your limit')
+}
+
+/** Run a model call, record its token usage/cost, and return the text. */
+async function runModel(
+  user: db.User,
+  call: ResolvedCall,
+  system: string,
+  messages: ChatMessage[],
+  maxTokens = 4096,
+  onDelta?: OnDelta,
+): Promise<string> {
+  enforceQuota(user, call)
+  const { text, usage } = await chat(call.cfg, system, messages, maxTokens, onDelta)
+  const costUsd =
+    (usage.inputTokens / 1_000_000) * call.priceIn + (usage.outputTokens / 1_000_000) * call.priceOut
+  db.recordUsage({
+    userId: user.id,
+    modelId: call.modelId,
+    provider: call.cfg.provider,
+    model: call.cfg.model,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    costUsd,
+  })
+  return text
 }
 
 /** Throw 404 unless `profileId` belongs to `userId` (cross-user isolation guard). */
@@ -114,6 +174,29 @@ const messageSchema = z.object({ content: z.string().trim().min(1).max(8000) })
 
 const weaknessStatusSchema = z.object({ status: z.enum(['open', 'improving', 'resolved']) })
 
+const modelCreateSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  provider: z.enum(['anthropic', 'openai', 'mock']),
+  model: z.string().trim().min(1).max(120),
+  apiKey: z.string().max(400).optional(),
+  enabled: z.boolean().default(true),
+  is_default: z.boolean().default(false),
+  price_in: z.number().min(0).max(10000).default(0),
+  price_out: z.number().min(0).max(10000).default(0),
+})
+
+const modelUpdateSchema = z.object({
+  label: z.string().trim().min(1).max(120).optional(),
+  apiKey: z.string().max(400).optional(),
+  enabled: z.boolean().optional(),
+  is_default: z.boolean().optional(),
+  price_in: z.number().min(0).max(10000).optional(),
+  price_out: z.number().min(0).max(10000).optional(),
+})
+
+const modelSelectSchema = z.object({ model_id: z.number().int().positive() })
+const quotaSchema = z.object({ token_quota: z.number().int().min(0).nullable() })
+
 // ── config ──────────────────────────────────────────────────────────
 
 api.get('/health', (c) => {
@@ -176,12 +259,121 @@ api.post('/auth/verify', async (c) => {
   const email = db.consumeMagicLink(token)
   if (!email) throw new HttpError(400, 'this sign-in link is invalid or expired — request a new one')
   const user = db.upsertUserByEmail(email)
+  // Promote configured admin emails (SENIORBRO_ADMIN_EMAILS) on sign-in.
+  let role = user.role
+  if (isAdminEmail(email) && role !== 'admin') {
+    db.setUserRole(user.id, 'admin')
+    role = 'admin'
+  }
   startSession(c, user.id)
-  return c.json({ ok: true, email: user.email, role: user.role })
+  return c.json({ ok: true, email: user.email, role })
 })
 
 api.post('/auth/logout', (c) => {
   endSession(c)
+  return c.json({ ok: true })
+})
+
+// ── model catalog & usage (user-facing) ──────────────────────────────
+
+// Curated models the user may pick from (admin-enabled only; never exposes keys).
+api.get('/models', (c) => {
+  const user = requireUser(c)
+  return c.json({ models: db.listModels(true), selected_model_id: user.model_id })
+})
+
+// Pick an admin-curated model (host key + metered). Hosted mode only.
+api.post('/models/select', async (c) => {
+  const user = requireUser(c)
+  const { model_id } = await parseBody(c, modelSelectSchema)
+  const option = db.getModel(model_id)
+  if (!option?.enabled) throw new HttpError(404, 'model not available')
+  db.setUserModelChoice(user.id, model_id)
+  return c.json({ ok: true })
+})
+
+// The signed-in user's own usage + quota.
+api.get('/usage', (c) => {
+  const user = requireUser(c)
+  return c.json({
+    usage: db.usageSummary(user.id),
+    token_quota: user.token_quota,
+    tokens_used: db.tokensUsed(user.id),
+  })
+})
+
+// ── admin (model/key management, users, usage console) ───────────────
+
+api.get('/admin/models', (c) => {
+  requireAdmin(c)
+  return c.json(db.listModels(false))
+})
+
+api.post('/admin/models', async (c) => {
+  requireAdmin(c)
+  const body = await parseBody(c, modelCreateSchema)
+  // Validate the key works before saving (mock needs none).
+  if (body.provider !== 'mock') {
+    const check = await validateKey({
+      provider: body.provider,
+      apiKey: body.apiKey?.trim() ?? '',
+      model: body.model,
+    })
+    if (!check.ok) throw new HttpError(400, `key validation failed: ${check.error ?? 'unknown'}`)
+  }
+  const created = db.createModel({
+    label: body.label,
+    provider: body.provider,
+    model: body.model,
+    apiKey: body.apiKey?.trim() ?? '',
+    enabled: body.enabled,
+    is_default: body.is_default,
+    price_in: body.price_in,
+    price_out: body.price_out,
+  })
+  return c.json(created)
+})
+
+api.patch('/admin/models/:id', async (c) => {
+  requireAdmin(c)
+  const id = Number(c.req.param('id'))
+  const body = await parseBody(c, modelUpdateSchema)
+  const updated = db.updateModel(id, {
+    label: body.label,
+    enabled: body.enabled,
+    is_default: body.is_default,
+    price_in: body.price_in,
+    price_out: body.price_out,
+    apiKey: body.apiKey?.trim(),
+  })
+  if (!updated) throw new HttpError(404, 'model not found')
+  return c.json(updated)
+})
+
+api.delete('/admin/models/:id', (c) => {
+  requireAdmin(c)
+  db.deleteModel(Number(c.req.param('id')))
+  return c.json({ ok: true })
+})
+
+api.get('/admin/users', (c) => {
+  requireAdmin(c)
+  return c.json(
+    db.listUsers().map((u) => ({
+      id: u.id,
+      email: u.email,
+      role: u.role,
+      model_id: u.model_id,
+      token_quota: u.token_quota,
+      ...db.usageSummary(u.id),
+    })),
+  )
+})
+
+api.post('/admin/users/:id/quota', async (c) => {
+  requireAdmin(c)
+  const { token_quota } = await parseBody(c, quotaSchema)
+  db.setUserQuota(Number(c.req.param('id')), token_quota)
   return c.json({ ok: true })
 })
 
@@ -217,10 +409,10 @@ api.get('/profile', (c) => {
 // ── calibration ─────────────────────────────────────────────────────
 
 api.post('/calibration/start', async (c) => {
-  const { user, cfg } = requireConfig(c)
+  const { user, call } = requireCall(c)
   const { profile_id } = await parseBody(c, calibrationStartSchema)
   const profile = ownProfile(user.id, profile_id)
-  const raw = await chat(cfg, 'You generate interview calibration questions as JSON.', [
+  const raw = await runModel(user, call, 'You generate interview calibration questions as JSON.', [
     { role: 'user', content: calibrationGeneratePrompt(profile) },
   ])
   const questions = extractJson<string[]>(raw)
@@ -229,12 +421,12 @@ api.post('/calibration/start', async (c) => {
 })
 
 api.post('/calibration/submit', async (c) => {
-  const { user, cfg } = requireConfig(c)
+  const { user, call } = requireCall(c)
   const { calibration_id, answers } = await parseBody(c, calibrationSubmitSchema)
   const calibration = db.getCalibration(calibration_id)
   if (!calibration) throw new HttpError(404, 'calibration not found')
   const profile = ownProfile(user.id, calibration.profile_id)
-  const raw = await chat(cfg, 'You grade interview calibration quizzes as JSON.', [
+  const raw = await runModel(user, call, 'You grade interview calibration quizzes as JSON.', [
     { role: 'user', content: calibrationGradePrompt(profile, calibration.questions as string[], answers) },
   ])
   const result = extractJson<{ level: string; summary: string }>(raw)
@@ -261,7 +453,7 @@ function systemFor(interview: db.InterviewRow, weaknessId?: number): string {
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '').trim()
 
 api.post('/interviews', async (c) => {
-  const { user, cfg } = requireConfig(c)
+  const { user, call } = requireCall(c)
   const body = await parseBody(c, interviewSchema)
   const profile = ownProfile(user.id, body.profile_id)
 
@@ -274,14 +466,14 @@ api.post('/interviews', async (c) => {
   }
 
   if (!wantsStream(c)) {
-    const opener = await chat(cfg, system, messages)
+    const opener = await runModel(user, call, system, messages)
     persist(opener)
     return c.json({ interview_id: interview.id, message: opener })
   }
 
   return streamSSE(c, async (stream) => {
     try {
-      const opener = await chat(cfg, system, messages, 4096, (t) => {
+      const opener = await runModel(user, call, system, messages, 4096, (t) => {
         void stream.writeSSE({ event: 'delta', data: JSON.stringify(t) })
       })
       persist(opener)
@@ -299,7 +491,7 @@ api.post('/interviews', async (c) => {
 })
 
 api.post('/interviews/:id/messages', async (c) => {
-  const { user, cfg } = requireConfig(c)
+  const { user, call } = requireCall(c)
   const id = Number(c.req.param('id'))
   const interview = ownInterview(user.id, id)
   if (interview.status !== 'active') throw new HttpError(409, 'interview already finished')
@@ -321,13 +513,13 @@ api.post('/interviews/:id/messages', async (c) => {
   }
 
   if (!wantsStream(c)) {
-    const reply = await chat(cfg, system, messages)
+    const reply = await runModel(user, call, system, messages)
     return c.json(persist(reply))
   }
 
   return streamSSE(c, async (stream) => {
     try {
-      const reply = await chat(cfg, system, messages, 4096, (t) => {
+      const reply = await runModel(user, call, system, messages, 4096, (t) => {
         void stream.writeSSE({ event: 'delta', data: JSON.stringify(t) })
       })
       await stream.writeSSE({ event: 'done', data: JSON.stringify(persist(reply)) })
@@ -341,7 +533,7 @@ api.post('/interviews/:id/messages', async (c) => {
 })
 
 api.post('/interviews/:id/finish', async (c) => {
-  const { user, cfg } = requireConfig(c)
+  const { user, call } = requireCall(c)
   const id = Number(c.req.param('id'))
   const interview = ownInterview(user.id, id)
   if (interview.status === 'finished') return c.json(interview.report)
@@ -350,8 +542,9 @@ api.post('/interviews/:id/finish', async (c) => {
 
   const profile = ownProfile(user.id, interview.profile_id)
 
-  const raw = await chat(
-    cfg,
+  const raw = await runModel(
+    user,
+    call,
     'You evaluate mock interviews and respond with strict JSON.',
     [{ role: 'user', content: evaluationPrompt(profile, interview.transcript) }],
     8192,

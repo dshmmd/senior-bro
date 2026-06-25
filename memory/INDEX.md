@@ -24,3 +24,7 @@ One entry per completed milestone. Read this before working on the repo.
   `SENIORBRO_MODE=local|hosted`; magic-link accounts + sessions, per-user data isolation
   (`user_id` migration), per-user provider config encrypted at rest (AES-256-GCM). Local
   mode unchanged. Unblocks deploy to 95.38.235.93; R13 admin/metering (Ph 8/9) still pending.
+- [2026-06-25 — R13 admin + metering slice](2026-06-25-r13-admin-metering-slice.md) —
+  Phase 9 admin (model/key catalog, user quotas, usage console) + Phase 8 metering
+  (`chat()` returns token usage; `usage_events`; per-call cost; 402 over quota). Admin
+  curates models, users pick one (host key) or BYOK. R13 functional end-to-end.
