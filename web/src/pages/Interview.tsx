@@ -110,9 +110,12 @@ export function Interview({
 
   const toggleMic = () => {
     if (listening) {
+      // D15: don't auto-send raw speech-to-text — drop it into the editable box so the
+      // user can fix accent/transcription errors and confirm before it reaches the model.
       const text = listener.current.stop()
       setListening(false)
-      void send(text)
+      setInterim('')
+      if (text.trim()) setDraft((d) => (d.trim() ? `${d.trim()} ${text.trim()}` : text.trim()))
     } else {
       speaker.current.cancel() // barge-in: talking interrupts the interviewer
       setError('')
@@ -206,25 +209,32 @@ export function Interview({
       {error && <div className="error">{error}</div>}
 
       {!done && mode === 'voice' && (
-        <div className="voicebar">
-          <button className={`mic ${listening ? 'live' : ''}`} disabled={busy} onClick={toggleMic}>
-            {listening ? '■' : '🎤'}
-          </button>
-          <div className="hint">
-            {listening
-              ? 'Listening — tap to send your answer'
-              : busy
-                ? ''
-                : 'Tap the mic and speak your answer'}
-          </div>
+        <div className="hint" style={{ marginBottom: 4 }}>
+          {listening
+            ? 'Listening — tap ■ to stop, then review and edit before sending'
+            : 'Tap 🎤 to speak. Your words land in the box below — fix anything, then Send.'}
         </div>
       )}
 
-      {!done && mode === 'text' && (
+      {!done && (
         <div className="composer">
+          {mode === 'voice' && (
+            <button
+              className={`mic ${listening ? 'live' : ''}`}
+              disabled={busy}
+              onClick={toggleMic}
+              title="Dictate your answer"
+            >
+              {listening ? '■' : '🎤'}
+            </button>
+          )}
           <textarea
             value={draft}
-            placeholder="Type your answer… (Enter to send, Shift+Enter for newline)"
+            placeholder={
+              mode === 'voice'
+                ? 'Speak with the mic, or type here. Review, then Send (Enter to send).'
+                : 'Type your answer… (Enter to send, Shift+Enter for newline)'
+            }
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {

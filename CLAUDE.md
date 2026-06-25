@@ -40,6 +40,10 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 
 0. **`ROADMAP.md` is the live product plan.** Read it + `memory/INDEX.md` first;
    continue the lowest unfinished phase unless the owner says otherwise.
+0a. **Reporting style (owner, 2026-06-25):** the owner wants **results and important
+   notes/questions only — not a technical play-by-play**. Lead with the outcome; surface
+   blockers, decisions, and questions. Put durable decisions/findings in `ROADMAP.md` /
+   `CLAUDE.md` so every agent sees them, rather than only in chat.
 1. Read `memory/INDEX.md` before starting any task — it records what is done and why.
 2. When a plan item below is completed, mark it `[x]` here AND append a short
    entry to `memory/` (one file per milestone, linked from `memory/INDEX.md`).
@@ -97,6 +101,22 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   (prompt-injection / jailbreak resistance). (D13 · Phase 14)
 - [ ] R20: **Accent-aware voice** — send audio to the model where supported, otherwise an
   editable transcript the user confirms before sending (no more auto-sent raw STT). (D15 · Phase 16)
+  **Editable-transcript fallback shipped 2026-06-25** (voice dictates into an editable box; user
+  reviews/edits, then sends). Native audio-in is provider-gated — **Claude can't take audio**;
+  only OpenAI (gpt-4o-audio / realtime) and Gemini can. See ROADMAP Q6 + D17.
+
+### Owner additions 2026-06-25 (R21–R24)
+- [ ] R21: **Back navigation everywhere** — every screen has an obvious Back so users never get
+  stuck/confused. (Phase 17)
+- [ ] R22: **Fuzzy / tiered target** — if the user doesn't know the exact company, let them pick a
+  **Tier 1 / Tier 2 / …** (FAANG-tier, top-startup, mid, etc.) so setting a target is easy; the
+  generated pack targets that tier's bar. Extends company packs (D10 · R14 · Phase 15/17).
+- [ ] R23: **Evidence-gated knowledge** — don't accept a skill/claim from the user as true until
+  they've actually answered questions demonstrating it; the profile/level reflects *shown*
+  ability, not self-report. (Phase 17, ties into calibration R6 + weaknesses R7)
+- [ ] R24: **Multiple profiles per user** — a user can keep several profiles (different stack or
+  seniority) and switch between them. (Phase 17; the DB already stores many profiles per user —
+  the UI currently only uses the latest.)
 
 ## Architecture
 

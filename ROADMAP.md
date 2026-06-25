@@ -47,6 +47,7 @@ card — for testers, partners, and early users. See D11.
 | D14 | **Session continuity & returning users** (2026-06-25): long-lived auth so a user is recognized on every visit; an interrupted interview is **resumable exactly where it left off** (server is the source of truth — transcripts are already persisted; add active-interview detection + a "resume" entry point). | Owner: "leave a session and come back later and continue that" — durable, resumable sessions are table-stakes for a real product |
 | D15 | **Voice = accent-aware** (2026-06-25): stop auto-sending raw speech-to-text. Two paths: (a) **send the audio to the model** where the provider supports audio input (accent help, no lossy transcription); (b) universal fallback = STT with an **editable transcript** the user confirms before sending. Prefer (a) when available, always offer (b). | Owner: raw STT can't be edited and loses accent signal — let the model hear the voice or let the user fix the text first |
 | D16 | **Company research via the provider's built-in web search tool** (2026-06-25, answers Q4): generate packs with Anthropic/OpenAI web search behind a thin `searchProvider` seam; results cached per company in DB (one-time cost, reused across users). Swap to Tavily/Brave later only if we need tighter per-search token control. | Easiest path to production; caching makes token cost a non-issue; the seam keeps the door open |
+| D17 | **Voice = editable transcript by default; native audio is an OpenAI/Gemini-only upgrade** (2026-06-25, refines D15/Q6): the universal accent-aware path is STT → **editable transcript the user confirms before sending** (shipped). True "model hears the voice" requires an audio-in model — **Claude has none**; only OpenAI (`gpt-4o-audio` / realtime) and Gemini do. Treat native audio as a per-provider capability behind a seam, offered only when the selected model supports it; never block the core flow on it. | Owner wants the model to hear accents, but our primary provider (Claude) can't take audio — so the editable transcript must be the floor, and native audio is an opt-in upgrade on capable providers |
 
 > **North star (owner, 2026-06-25):** "requirements are not god's words — use your
 > creativity; the goal is an *easy-to-use service for people who want to learn*, built to
@@ -74,8 +75,14 @@ card — for testers, partners, and early users. See D11.
   dedicated API (Tavily returns LLM-condensed results → fewer tokens; Brave is cheapest) is the
   swap-in if we ever need tighter per-search token control or a provider lacks search. See D16.
 - ~~Q5~~ **ANSWERED (2026-06-25): Drizzle ORM + Postgres.** (D9 locked.)
-- Q6: Audio-capable model for D15 — which provider/model do we target for native audio input,
-  and is the editable-transcript fallback acceptable as the default until that's wired? (still open)
+- ~~Q6~~ **PARTIALLY ANSWERED (2026-06-25): editable-transcript fallback shipped as the default;
+  native audio is provider-gated.** Capability check: **Claude / Anthropic Messages API does NOT
+  accept audio input** (text + images + PDF only) — our primary provider can't hear the candidate.
+  **OpenAI** does: `gpt-4o-audio-preview` (Chat Completions `input_audio`) and the **Realtime API**
+  (`gpt-4o-realtime`). **Gemini 2.x** also takes native audio. So "send the audio to the model"
+  only works on an OpenAI/Gemini path, never on Claude. **Still open for the owner:** do we add an
+  OpenAI/Gemini audio path (and on which plan — BYO-OpenAI-key vs a host audio model), or ship
+  accent-aware voice purely via the editable transcript for now? See D17.
 - ~~Q7~~ **ANSWERED (2026-06-25): single Postgres for local + hosted; retire `node:sqlite`.**
   Local dev = a Postgres container on the laptop (temporary); **scalability is the north star**,
   so the schema/queries target a real server-grade DB from day one. Local single-user becomes a
@@ -309,12 +316,28 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - [ ] Admin review queue: approve / edit / publish / refresh a generated pack; staleness TTL.
 - [ ] Interview setup uses the stored pack (generate-on-miss, then cache).
 
-### Phase 16 — Accent-aware voice (D15)
-- [ ] Stop auto-sending raw STT. Add an **editable transcript** the user confirms before send
-      (universal fallback).
+### Phase 16 — Accent-aware voice (D15 / D17)
+- [x] Stop auto-sending raw STT. Add an **editable transcript** the user confirms before send
+      (universal fallback). Shipped 2026-06-25: in voice mode the mic dictates into an editable
+      composer; the user reviews/edits, then Sends (`web/src/pages/Interview.tsx`).
 - [ ] Where the provider supports it, send **audio directly to the model** (accent help) instead
-      of/in addition to STT.
+      of/in addition to STT. **Provider-gated (Q6/D17):** Claude can't take audio; target OpenAI
+      (`gpt-4o-audio` / realtime) or Gemini. Behind a capability seam; needs owner go-ahead on
+      which plan carries it.
 - [ ] Capability detection: pick audio-native vs. editable-transcript per configured model.
+
+### Phase 17 — UX, fuzzy targets, multi-profile & evidence-gating (R21–R24, owner 2026-06-25)
+- [ ] **R21 Back navigation:** every screen (Setup, Profile, Calibration, Plan, …) has an obvious
+      Back so users never get stuck; consistent placement.
+- [ ] **R22 Fuzzy/tiered target:** when the company is unknown, let the user pick a **Tier** (e.g.
+      Tier 1 = FAANG-bar, Tier 2 = strong scale-up, Tier 3 = general) instead of an exact name;
+      the pack/interview calibrates to that tier. Builds on Phase 15 company packs (D10).
+- [ ] **R23 Evidence-gated knowledge:** never accept a self-reported skill as true until the user
+      has answered questions demonstrating it; level/strengths reflect *shown* ability. Ties into
+      calibration (R6) and weakness detection (R7).
+- [ ] **R24 Multiple profiles per user:** keep several profiles (different stack/seniority) and
+      switch between them. The DB already stores many profiles per user (`profiles.user_id`); the
+      app currently surfaces only the latest — add a picker + "new profile" without losing history.
 
 ---
 
