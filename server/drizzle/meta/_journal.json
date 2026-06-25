@@ -8,6 +8,13 @@
       "when": 1782397057496,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782409992257,
+      "tag": "0001_blue_lester",
+      "breakpoints": true
     }
   ]
 }

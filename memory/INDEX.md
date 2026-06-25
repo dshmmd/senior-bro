@@ -36,3 +36,7 @@ One entry per completed milestone. Read this before working on the repo.
   retired node:sqlite for **PostgreSQL (Docker) via Drizzle ORM**; async db layer behind the
   same function names; docker-compose + Make/CI/e2e wired to Postgres; sqlite→pg import script.
   make check + e2e + hosted curl all green on PG. Next = **Phase 12 (identity & resume)**.
+- [2026-06-25 — Phase 12: Identity & resumable sessions](2026-06-25-phase12-identity-resumable.md) —
+  resume an interrupted interview from the server transcript (`resumeId` in `Interview`, Dashboard
+  resume banner + `DELETE /api/interviews/:id` discard); "Welcome back" greeting; DB-level FKs +
+  indexes (migration 0001) for per-user partitioning. R15 done. Next = **Phase 13 (plans & invite codes)**.

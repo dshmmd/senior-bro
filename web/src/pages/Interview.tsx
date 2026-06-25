@@ -15,12 +15,15 @@ export function Interview({
   mode,
   kind,
   weaknessId,
+  resumeId,
   onExit,
 }: {
   profile: Profile
   mode: 'voice' | 'text'
   kind: 'full' | 'coaching'
   weaknessId?: number
+  /** When set, reload this in-progress interview from the server instead of starting fresh (D14). */
+  resumeId?: number
   onExit: () => void
 }) {
   const [interviewId, setInterviewId] = useState<number | null>(null)
@@ -48,6 +51,22 @@ export function Interview({
   useEffect(() => {
     if (started.current) return
     started.current = true
+    // Resume: the server transcript is the source of truth — reload it, don't
+    // re-open the conversation (and never auto-speak the back-history in voice mode).
+    if (resumeId !== undefined) {
+      api
+        .getInterview(resumeId)
+        .then((iv) => {
+          setInterviewId(iv.id)
+          setMessages(iv.transcript)
+        })
+        .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+        .finally(() => {
+          setPartial(null)
+          setThinking(false)
+        })
+      return
+    }
     api
       .startInterview(profile.id, mode, kind, weaknessId, onDelta)
       .then((r) => {
@@ -61,7 +80,7 @@ export function Interview({
         setThinking(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.id, mode, kind, weaknessId])
+  }, [profile.id, mode, kind, weaknessId, resumeId])
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })

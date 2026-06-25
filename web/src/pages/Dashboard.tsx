@@ -5,13 +5,17 @@ import { ReportView } from './Report'
 
 export function Dashboard({
   profile,
+  email,
   onStartInterview,
+  onResumeInterview,
   onNewProfile,
   onRecalibrate,
   onOpenProgress,
 }: {
   profile: Profile
+  email: string | null
   onStartInterview: (mode: 'voice' | 'text', kind: 'full' | 'coaching', weaknessId?: number) => void
+  onResumeInterview: (id: number, mode: 'voice' | 'text', kind: 'full' | 'coaching') => void
   onNewProfile: () => void
   onRecalibrate: () => void
   onOpenProgress: () => void
@@ -21,11 +25,14 @@ export function Dashboard({
   const [openReport, setOpenReport] = useState<number | null>(null)
   const canVoice = voiceSupported()
 
-  useEffect(() => {
+  const reloadHistory = () =>
     api
       .listInterviews()
       .then(setHistory)
       .catch(() => undefined)
+
+  useEffect(() => {
+    void reloadHistory()
     api
       .listWeaknesses()
       .then(setWeaknesses)
@@ -33,17 +40,52 @@ export function Dashboard({
   }, [])
 
   const open = weaknesses.filter((w) => w.status !== 'resolved')
+  // The most recent unfinished interview is the one we offer to resume (D14).
+  const resumable = history.find((h) => h.status === 'active') ?? null
+  // "Returning" = they've been here and run interviews before (drives the greeting).
+  const returning = history.length > 0
+
+  const discard = (id: number) => {
+    void api
+      .abandonInterview(id)
+      .then(reloadHistory)
+      .catch(() => undefined)
+  }
 
   if (openReport !== null) return <ReportView interviewId={openReport} onBack={() => setOpenReport(null)} />
 
   return (
     <>
-      <h1>Ready when you are</h1>
+      <h1>{returning ? 'Welcome back' : 'Ready when you are'}</h1>
       <p className="sub">
         {profile.role}
         {profile.company ? ` @ ${profile.company}` : ''} ·{' '}
         {profile.level && <span className={`badge ${profile.level}`}>{profile.level}</span>}
+        {email ? ` · ${email}` : ''}
       </p>
+
+      {resumable && (
+        <div className="card" style={{ borderColor: 'var(--accent)' }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <b>⏸️ You have an interview in progress</b>
+              <div style={{ color: 'var(--muted)', fontSize: 14 }}>
+                {resumable.kind === 'coaching' ? 'Coaching drill' : 'Mock interview'} · {resumable.mode} ·{' '}
+                {resumable.turns} turn{resumable.turns === 1 ? '' : 's'} · started{' '}
+                {resumable.created_at.slice(0, 16)}. Pick up exactly where you left off.
+              </div>
+            </div>
+            <div className="row">
+              <button onClick={() => onResumeInterview(resumable.id, resumable.mode, resumable.kind)}>
+                Resume →
+              </button>
+              <button className="secondary" onClick={() => discard(resumable.id)}>
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card clickable" onClick={onOpenProgress} style={{ borderColor: 'var(--accent)' }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -132,16 +174,26 @@ export function Dashboard({
                 {history.map((h) => (
                   <tr
                     key={h.id}
-                    className={h.status === 'finished' ? 'clickable' : ''}
-                    onClick={() => h.status === 'finished' && setOpenReport(h.id)}
+                    className="clickable"
+                    onClick={() =>
+                      h.status === 'finished' ? setOpenReport(h.id) : onResumeInterview(h.id, h.mode, h.kind)
+                    }
                   >
                     <td>{h.id}</td>
                     <td>{h.kind}</td>
                     <td>{h.mode}</td>
                     <td>{h.created_at.slice(0, 16)}</td>
-                    <td>{h.overall_score ?? '—'}</td>
                     <td>
-                      {h.level_estimate ? (
+                      {h.status === 'active' ? (
+                        <span className="badge improving">in progress</span>
+                      ) : (
+                        (h.overall_score ?? '—')
+                      )}
+                    </td>
+                    <td>
+                      {h.status === 'active' ? (
+                        'resume →'
+                      ) : h.level_estimate ? (
                         <span className={`badge ${h.level_estimate}`}>{h.level_estimate}</span>
                       ) : (
                         '—'

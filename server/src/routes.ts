@@ -581,6 +581,16 @@ api.get('/interviews/:id', async (c) => {
   return c.json(interview)
 })
 
+// Discard an in-progress interview the user chose to abandon (never a finished one,
+// so reports stay intact). Phase 12 (D14): clears a stale "resume" entry.
+api.delete('/interviews/:id', async (c) => {
+  const user = await requireUser(c)
+  const interview = await ownInterview(user.id, Number(c.req.param('id')))
+  if (interview.status === 'finished') throw new HttpError(409, 'cannot discard a finished interview')
+  await db.deleteInterview(interview.id)
+  return c.json({ ok: true })
+})
+
 // ── weaknesses ──────────────────────────────────────────────────────
 
 api.get('/weaknesses', async (c) => {

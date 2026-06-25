@@ -281,6 +281,11 @@ export async function finishInterview(id: number, report: InterviewReport): Prom
     .where(eq(t.interviews.id, id))
 }
 
+/** Discard an interview outright (used to drop an abandoned, in-progress one). */
+export async function deleteInterview(id: number): Promise<void> {
+  await db.delete(t.interviews).where(eq(t.interviews.id, id))
+}
+
 // ── weaknesses ───────────────────────────────────────────────────────
 
 type WeaknessRow = typeof t.weaknesses.$inferSelect

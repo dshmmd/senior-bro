@@ -28,31 +28,33 @@ test('landing → profile → calibration → interview → report', async ({ pa
   await expect(page.getByRole('heading', { name: 'Ready when you are' })).toBeVisible()
   await page.getByText('⌨️ Text interview').click()
 
-  // interview: opener streams in, then 3 answers until wrap
+  // interview: opener streams in, then answers until wrap
   await expect(page.getByText(/tell me briefly about your current role/)).toBeVisible({ timeout: 15_000 })
   const composer = page.getByPlaceholder(/Type your answer/)
-  const turns: { answer: string; expectNext: RegExp }[] = [
-    {
-      answer: 'I build Go services behind PostgreSQL.',
-      expectNext: /disagreed with a teammate/,
-    },
-    {
-      answer: 'I disagreed about an index change; we benchmarked and shipped the better one.',
-      expectNext: /URL shortener/,
-    },
-    {
-      answer: 'Hash the URL, store the mapping, cache hot links, shard by key prefix.',
-      expectNext: /Great session/,
-    },
-  ]
   const sendBtn = page.getByRole('button', { name: 'Send', exact: true })
-  for (const turn of turns) {
-    await composer.fill(turn.answer)
+  const answer = async (text: string, expectNext: RegExp) => {
+    await composer.fill(text)
     // the Send button stays disabled until the previous streamed reply finishes
     await expect(sendBtn).toBeEnabled({ timeout: 15_000 })
     await sendBtn.click()
-    await expect(page.getByText(turn.expectNext)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(expectNext)).toBeVisible({ timeout: 15_000 })
   }
+
+  await answer('I build Go services behind PostgreSQL.', /disagreed with a teammate/)
+
+  // D14: leave the interview mid-flow, then resume it exactly where it stopped.
+  await page.getByRole('button', { name: 'Quit' }).click()
+  await expect(page.getByText('You have an interview in progress')).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Resume →' }).click()
+  // The server transcript is restored: both the first answer and the follow-up question.
+  await expect(page.getByText('I build Go services behind PostgreSQL.')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/disagreed with a teammate/)).toBeVisible()
+
+  await answer(
+    'I disagreed about an index change; we benchmarked and shipped the better one.',
+    /URL shortener/,
+  )
+  await answer('Hash the URL, store the mapping, cache hot links, shard by key prefix.', /Great session/)
   await expect(page.getByText('The interviewer has wrapped up')).toBeVisible({ timeout: 15_000 })
 
   // evaluation report

@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, real, serial, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, real, serial, text, timestamp } from 'drizzle-orm/pg-core'
 
 /**
  * Drizzle schema (D9 / Phase 11). Mirrors the original node:sqlite tables 1:1 so
@@ -6,6 +6,11 @@ import { boolean, integer, pgTable, real, serial, text, timestamp } from 'drizzl
  * transcript, questions, result, report) stay as TEXT holding JSON strings — db.ts
  * parses/stringifies them, exactly as before. Timestamps use `mode: 'string'` so
  * created_at/finished_at come back as strings (matching the existing interfaces).
+ *
+ * Phase 12 (D14) added real foreign keys + lookup indexes so per-user ownership is
+ * enforced at the database, not just the route guards. `onDelete` is chosen per edge:
+ * child rows that only make sense under a parent cascade; historical/optional links
+ * (usage events' model, a weakness' source interview) null out instead of blocking.
  */
 const createdAt = () => timestamp('created_at', { mode: 'string' }).notNull().defaultNow()
 
@@ -16,17 +21,24 @@ export const users = pgTable('users', {
   provider: text('provider'),
   model: text('model'),
   apiKeyEnc: text('api_key_enc'),
-  modelId: integer('model_id'),
+  // The currently-selected curated model; nulled (not blocked) if that model is deleted.
+  modelId: integer('model_id').references(() => models.id, { onDelete: 'set null' }),
   tokenQuota: integer('token_quota'),
   createdAt: createdAt(),
 })
 
-export const sessions = pgTable('sessions', {
-  token: text('token').primaryKey(),
-  userId: integer('user_id').notNull(),
-  createdAt: createdAt(),
-  expiresAt: timestamp('expires_at', { mode: 'string' }).notNull(),
-})
+export const sessions = pgTable(
+  'sessions',
+  {
+    token: text('token').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+    expiresAt: timestamp('expires_at', { mode: 'string' }).notNull(),
+  },
+  (t) => [index('sessions_user_id_idx').on(t.userId)],
+)
 
 export const magicLinks = pgTable('magic_links', {
   token: text('token').primaryKey(),
@@ -36,50 +48,74 @@ export const magicLinks = pgTable('magic_links', {
   createdAt: createdAt(),
 })
 
-export const profiles = pgTable('profiles', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id'),
-  role: text('role').notNull(),
-  company: text('company'),
-  skillPack: text('skill_pack'),
-  technologies: text('technologies').notNull().default('[]'),
-  yearsExperience: integer('years_experience').notNull().default(0),
-  notes: text('notes'),
-  level: text('level'),
-  levelSummary: text('level_summary'),
-  createdAt: createdAt(),
-})
+export const profiles = pgTable(
+  'profiles',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    company: text('company'),
+    skillPack: text('skill_pack'),
+    technologies: text('technologies').notNull().default('[]'),
+    yearsExperience: integer('years_experience').notNull().default(0),
+    notes: text('notes'),
+    level: text('level'),
+    levelSummary: text('level_summary'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('profiles_user_id_idx').on(t.userId)],
+)
 
-export const calibrations = pgTable('calibrations', {
-  id: serial('id').primaryKey(),
-  profileId: integer('profile_id').notNull(),
-  questions: text('questions').notNull(),
-  result: text('result'),
-  createdAt: createdAt(),
-})
+export const calibrations = pgTable(
+  'calibrations',
+  {
+    id: serial('id').primaryKey(),
+    profileId: integer('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    questions: text('questions').notNull(),
+    result: text('result'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('calibrations_profile_id_idx').on(t.profileId)],
+)
 
-export const interviews = pgTable('interviews', {
-  id: serial('id').primaryKey(),
-  profileId: integer('profile_id').notNull(),
-  mode: text('mode').notNull().default('text'),
-  kind: text('kind').notNull().default('full'),
-  status: text('status').notNull().default('active'),
-  transcript: text('transcript').notNull().default('[]'),
-  report: text('report'),
-  createdAt: createdAt(),
-  finishedAt: timestamp('finished_at', { mode: 'string' }),
-})
+export const interviews = pgTable(
+  'interviews',
+  {
+    id: serial('id').primaryKey(),
+    profileId: integer('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    mode: text('mode').notNull().default('text'),
+    kind: text('kind').notNull().default('full'),
+    status: text('status').notNull().default('active'),
+    transcript: text('transcript').notNull().default('[]'),
+    report: text('report'),
+    createdAt: createdAt(),
+    finishedAt: timestamp('finished_at', { mode: 'string' }),
+  },
+  (t) => [index('interviews_profile_id_idx').on(t.profileId)],
+)
 
-export const weaknesses = pgTable('weaknesses', {
-  id: serial('id').primaryKey(),
-  profileId: integer('profile_id').notNull(),
-  title: text('title').notNull(),
-  detail: text('detail').notNull(),
-  fix: text('fix').notNull().default(''),
-  status: text('status').notNull().default('open'),
-  sourceInterviewId: integer('source_interview_id'),
-  createdAt: createdAt(),
-})
+export const weaknesses = pgTable(
+  'weaknesses',
+  {
+    id: serial('id').primaryKey(),
+    profileId: integer('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    detail: text('detail').notNull(),
+    fix: text('fix').notNull().default(''),
+    status: text('status').notNull().default('open'),
+    sourceInterviewId: integer('source_interview_id').references(() => interviews.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('weaknesses_profile_id_idx').on(t.profileId)],
+)
 
 export const models = pgTable('models', {
   id: serial('id').primaryKey(),
@@ -94,14 +130,21 @@ export const models = pgTable('models', {
   createdAt: createdAt(),
 })
 
-export const usageEvents = pgTable('usage_events', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull(),
-  modelId: integer('model_id'),
-  provider: text('provider').notNull(),
-  model: text('model').notNull(),
-  inputTokens: integer('input_tokens').notNull().default(0),
-  outputTokens: integer('output_tokens').notNull().default(0),
-  costUsd: real('cost_usd').notNull().default(0),
-  createdAt: createdAt(),
-})
+export const usageEvents = pgTable(
+  'usage_events',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Keep historical usage even if the catalog model is later removed.
+    modelId: integer('model_id').references(() => models.id, { onDelete: 'set null' }),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: real('cost_usd').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index('usage_events_user_id_idx').on(t.userId)],
+)

@@ -20,7 +20,13 @@ export type View =
   | { name: 'calibration' }
   | { name: 'dashboard' }
   | { name: 'progress' }
-  | { name: 'interview'; mode: 'voice' | 'text'; kind: 'full' | 'coaching'; weaknessId?: number }
+  | {
+      name: 'interview'
+      mode: 'voice' | 'text'
+      kind: 'full' | 'coaching'
+      weaknessId?: number
+      resumeId?: number
+    }
 
 function subscribeOnline(cb: () => void) {
   window.addEventListener('online', cb)
@@ -168,9 +174,11 @@ export function App() {
         {view.name === 'dashboard' && profile && (
           <Dashboard
             profile={profile}
+            email={account.email}
             onStartInterview={(mode, kind, weaknessId) =>
               setView({ name: 'interview', mode, kind, weaknessId })
             }
+            onResumeInterview={(id, mode, kind) => setView({ name: 'interview', mode, kind, resumeId: id })}
             onNewProfile={() => setView({ name: 'profile' })}
             onRecalibrate={() => setView({ name: 'calibration' })}
             onOpenProgress={() => setView({ name: 'progress' })}
@@ -183,6 +191,7 @@ export function App() {
             mode={view.mode}
             kind={view.kind}
             weaknessId={view.weaknessId}
+            resumeId={view.resumeId}
             onExit={() => void refresh()}
           />
         )}

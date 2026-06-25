@@ -11,7 +11,8 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > below are superseded — durable Postgres store on Docker (**D9 ✅ Phase 11 shipped** —
 > `node:sqlite` retired), dynamic company-pack generation (D10, supersedes "one company =
 > one file"), admin-managed versioned prompts (D12, prompts leave `prompts.ts`). Read
-> ROADMAP Phases 11–16 before new work; **next up = Phase 12 (identity & resumable sessions)**.
+> ROADMAP Phases 11–16 before new work. **Phase 12 ✅ shipped** (resumable interviews +
+> returning-user "welcome back" + DB-level FKs/indexes); **next up = Phase 13 (plans, gating & invite codes)**.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -82,8 +83,8 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 ### Re-planning 2026-06-25 — next requirements (ROADMAP Phases 11–16, D9–D15)
 - [ ] R14: **Dynamic company packs** — research an unknown company on demand (web search →
   domain + role interview process), store + cache + reuse; admin review. (D10 · Phase 15)
-- [ ] R15: **Returning users + resumable sessions** — recognized every visit; leave an
-  interview and resume it later exactly where it stopped. (D14 · Phase 12)
+- [x] R15: **Returning users + resumable sessions** — recognized every visit; leave an
+  interview and resume it later exactly where it stopped. (D14 · Phase 12 ✅ 2026-06-25)
 - [ ] R16: **Durable per-user datastore for the long term** — PostgreSQL in Docker, typed
   migrations, strict per-user partitioning. (D9 · Phase 11)
 - [ ] R17: **Admin-managed, versioned system prompts** — edit/improve in the admin UI with

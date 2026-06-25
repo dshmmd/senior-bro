@@ -97,9 +97,9 @@ card — for testers, partners, and early users. See D11.
   admin-managed versioned prompts + guardrails, resumable sessions, accent-aware voice.
   These become **Phases 11–16**. **Recommended build order:**
   1. ~~**Phase 11 — Postgres/Docker foundation** (D9)~~ ✅ **shipped 2026-06-25.**
-  2. **Phase 12 — Identity & resumable sessions** (D14) ⬅ recommended next. Recognize
-     returning users; resume an interrupted interview.
-  3. **Phase 13 — Plans, gating & invite codes** (D11). Free level-check → plan choice;
+  2. ~~**Phase 12 — Identity & resumable sessions** (D14)~~ ✅ **shipped 2026-06-25.**
+     Returning-user "welcome back", resume an interrupted interview, DB-level FKs/indexes.
+  3. **Phase 13 — Plans, gating & invite codes** (D11) ⬅ recommended next. Free level-check → plan choice;
      mocked payment; admin-minted credit codes. Builds on Phase 8 metering.
   4. **Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13).
   5. **Phase 15 — Dynamic company skill packs** (D10).
@@ -254,14 +254,21 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - Known follow-up: `cost_usd` is stored as `real` (float) → minor precision drift; revisit
   with `numeric` if/when real billing lands (billing is token-denominated anyway, D11/Q3).
 
-### Phase 12 — Identity & resumable sessions (D14)
-- [ ] Returning-user recognition: durable session (already cookie-based) + "welcome back";
-      remember-me; clean re-auth when expired.
-- [ ] Detect an **in-progress interview** on login and offer **Resume** (server transcript is
-      source of truth); resume restores the exact phase/turn, voice or text.
-- [ ] "Your sessions" list: past + resumable interviews per user.
-- [ ] Robust per-user data partitioning review (every query scoped by user; add DB constraints
-      / row ownership checks) for long-term reliability.
+### Phase 12 — Identity & resumable sessions (D14) ✅ (2026-06-25)
+- [x] Returning-user recognition: durable 30-day `sb_session` cookie (already remember-me by
+      `maxAge`); a "Welcome back" greeting on the dashboard for users with prior sessions; clean
+      re-auth when expired (expired session → `authed:false` → login view, no stale state).
+- [x] Detect an **in-progress interview** and offer **Resume** (server transcript is the source
+      of truth); resume reloads the exact transcript/phase, voice or text, without re-opening the
+      conversation or re-speaking history. A prominent "interview in progress" banner + resumable
+      rows in History; **Discard** drops a stale active interview (`DELETE /api/interviews/:id`).
+- [x] "Your sessions" list: the dashboard History table lists past (finished) + in-progress
+      interviews per user; clicking a finished one opens its report, an active one resumes it.
+- [x] Robust per-user data partitioning: real **foreign keys + lookup indexes** added at the DB
+      (`server/src/schema.ts`, migration `0001`) — child rows cascade from their parent, optional
+      links (`usage_events.model_id`, `weaknesses.source_interview_id`, `users.model_id`) null out.
+      Route-level ownership guards (`ownProfile`/`ownInterview`) reviewed; all reads stay user-scoped.
+- **Gate: owner reviews before Phase 13 (plans, gating & invite codes).**
 
 ### Phase 13 — Plans, gating & invite codes (D11)
 - [ ] Plan model: `free-intro`, `host-models` (paid), `byok` (free), `local-cli` (free).

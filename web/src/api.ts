@@ -46,6 +46,18 @@ export interface InterviewSummary {
   level_estimate: string | null
 }
 
+export interface InterviewDetail {
+  id: number
+  profile_id: number
+  mode: 'voice' | 'text'
+  kind: 'full' | 'coaching'
+  status: 'active' | 'finished'
+  transcript: { role: 'user' | 'assistant'; content: string }[]
+  report: InterviewReport | null
+  created_at: string
+  finished_at: string | null
+}
+
 export interface DimensionProgress {
   name: string
   best: number
@@ -222,6 +234,8 @@ export const api = {
   sendMessage: (id: number, content: string, onDelta: (text: string) => void) =>
     ssePost<{ message: string; done: boolean }>(`/interviews/${id}/messages`, { content }, onDelta),
   finishInterview: (id: number) => post<InterviewReport>(`/interviews/${id}/finish`, {}),
+  getInterview: (id: number) => request<InterviewDetail>(`/interviews/${id}`),
+  abandonInterview: (id: number) => request<{ ok: boolean }>(`/interviews/${id}`, { method: 'DELETE' }),
   listInterviews: () => request<InterviewSummary[]>('/interviews'),
   listWeaknesses: () => request<Weakness[]>('/weaknesses'),
   setWeaknessStatus: (id: number, status: string) => post(`/weaknesses/${id}/status`, { status }),
