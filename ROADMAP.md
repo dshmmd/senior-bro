@@ -41,11 +41,17 @@ card — for testers, partners, and early users. See D11.
 | D8 | **Subscription auth via local CLI** (2026-06-24): besides BYO-API-key, support `claude-cli`/`codex-cli` providers that shell out to the user's logged-in `claude`/`codex` CLI in print mode (`claude -p`, `codex exec`). Bills the user's Claude Pro/Max or ChatGPT/Codex subscription — **no API credits**. Local mode ONLY (CLI runs on the user's own machine). The hosted tier must NOT proxy a customer's subscription remotely (ToS + can't share logins) — hosted uses API keys / host tokens. `server/src/providers.ts` strips `ANTHROPIC_*`/`OPENAI_*` env overrides so the CLI uses subscription auth. | The owner (and most users) have a $20 subscription but no API credits — this is the difference between being able to use the product at all or not |
 | D9 | **Durable datastore = PostgreSQL in Docker** (2026-06-25): replace `node:sqlite` with Postgres 16 run via `docker compose` (owner authorized Docker on their laptop). One real DB for both local-dev and hosted — no dual-DB burden. Data access through a **typed query/migration layer** (Drizzle ORM recommended, revisitable) with versioned migrations. This **supersedes the zero-runtime-deps rule** for the server: robustness/long-term per-user data now outranks install-surface minimalism. | "Make a good reliable design to work in long term" + "robust enterprise system" — SQLite single-file won't carry concurrent multi-user hosted load, migrations, and the new prompt/company/credit tables cleanly |
 | D10 | **Dynamic company skill packs** (2026-06-25): drop the "one company = one hand-written file" model. When a user names a company we don't have, the model **web-searches the company + its domain + the role's interview process**, drafts a pack, and stores it in the DB (cached + reused across users). The 4 static `skills/*.md` become the initial seed. Admin can review/edit/publish generated packs. | "Defining a few companies is useless" — every real user targets a different company; generation + cache scales to any company without a code change |
-| D11 | **Plans, gating & invite codes** (2026-06-25): free short level-check for all; then a plan is required. Plan A (host models) is metered + **mocked payment**; Plans B (BYO key) and C (local CLI) are free. **Invite codes** are admin-minted, carry a credit balance, and unlock paid usage without a card. Entitlement is checked server-side before any paid (host-key) call — extends the Phase 8 metering/quota we already have. | Owner's plan structure; lets us launch + onboard testers before real billing exists |
+| D11 | **Plans, gating & invite codes** (2026-06-25): free short level-check for all; then a plan is required. Plan A (host models) is metered + **mocked payment**; Plans B (BYO key) and C (local CLI) are free. **Credit & billing are denominated in TOKENS** (Q3) — exactly what `usage_events` records; an invite code (admin-minted) carries a **token balance** that metered usage decrements, unlocking paid usage without a card. Entitlement is checked server-side before any paid (host-key) call — extends the Phase 8 metering/quota we already have. | Owner's plan structure; tokens are the natural unit since we already meter them; lets us launch + onboard testers before real billing exists |
 | D12 | **Admin-managed, versioned system prompts** (2026-06-25): prompts move from `server/src/prompts.ts` constants into the DB, **editable in the admin UI, versioned with history + rollback**, with an active version per prompt key. Code ships the seed/default version. | Owner wants to manage & improve prompts live; versioning = safe iteration + auditability (best practice for prompt ops) |
 | D13 | **Prompt guardrails (anti-derailment)** (2026-06-25): every interview prompt wraps a **fixed, non-editable guardrail frame** that pins the model to the interview task and treats all candidate input as untrusted *content, never instructions*. Admin-edited prompt bodies sit **inside** the frame; users can never escape it (no "ignore previous instructions", topic changes, or role swaps). | "Users must not change the context far away from interview" — prompt-injection / jailbreak resistance is a correctness + brand requirement |
 | D14 | **Session continuity & returning users** (2026-06-25): long-lived auth so a user is recognized on every visit; an interrupted interview is **resumable exactly where it left off** (server is the source of truth — transcripts are already persisted; add active-interview detection + a "resume" entry point). | Owner: "leave a session and come back later and continue that" — durable, resumable sessions are table-stakes for a real product |
 | D15 | **Voice = accent-aware** (2026-06-25): stop auto-sending raw speech-to-text. Two paths: (a) **send the audio to the model** where the provider supports audio input (accent help, no lossy transcription); (b) universal fallback = STT with an **editable transcript** the user confirms before sending. Prefer (a) when available, always offer (b). | Owner: raw STT can't be edited and loses accent signal — let the model hear the voice or let the user fix the text first |
+| D16 | **Company research via the provider's built-in web search tool** (2026-06-25, answers Q4): generate packs with Anthropic/OpenAI web search behind a thin `searchProvider` seam; results cached per company in DB (one-time cost, reused across users). Swap to Tavily/Brave later only if we need tighter per-search token control. | Easiest path to production; caching makes token cost a non-issue; the seam keeps the door open |
+
+> **North star (owner, 2026-06-25):** "requirements are not god's words — use your
+> creativity; the goal is an *easy-to-use service for people who want to learn*, built to
+> **scale**." When a requirement and ease-of-use/scalability conflict, optimize for the
+> learner's experience and a clean path to production, and note the deviation at the gate.
 
 ## Open questions for the product owner
 
@@ -57,18 +63,23 @@ card — for testers, partners, and early users. See D11.
   deploy no longer exposes a shared datastore. Owner still wants the R13 admin/metering
   bundle (Phases 8/9) before actually charging users.
 - Q2: Which countries first for job-opportunity search? Affects which job boards/APIs.
-- Q3: Plan A pricing — what's the unit? (per interview-hour, per 1M tokens with a margin,
-  or a flat monthly with N interviews?) Needed before real (un-mocked) billing. Credit on
-  invite codes is expressed in the same unit.
-- Q4: Web-search source for company research (D10) — built-in model web search (Claude/OpenAI),
-  or a search API (Brave/Tavily/SerpAPI)? Affects cost + reliability + the generation prompt.
-- Q5: Confirm the data layer for D9 — **Drizzle ORM + Postgres** (recommended) vs. raw `pg` +
-  SQL migrations vs. Prisma. Locks in the migration tool before the rewrite starts.
+- ~~Q3~~ **ANSWERED (2026-06-25): the unit is TOKENS.** Plan A is billed and invite-code
+  credit is denominated in tokens — which is exactly what `usage_events` already records.
+  Credit balance is a token allowance; metered usage decrements it. (Real $-per-token rate is
+  a later, mocked-for-now concern.)
+- ~~Q4~~ **ANSWERED (2026-06-25): use the provider's built-in web search tool** (Anthropic web
+  search / OpenAI), behind a thin `searchProvider` seam. Rationale: easiest to production (no
+  extra vendor/key), and pack generation is **cached per company** so the (higher) token cost
+  is one-time and amortized across all users — control matters less than simplicity here. A
+  dedicated API (Tavily returns LLM-condensed results → fewer tokens; Brave is cheapest) is the
+  swap-in if we ever need tighter per-search token control or a provider lacks search. See D16.
+- ~~Q5~~ **ANSWERED (2026-06-25): Drizzle ORM + Postgres.** (D9 locked.)
 - Q6: Audio-capable model for D15 — which provider/model do we target for native audio input,
-  and is the editable-transcript fallback acceptable as the default until that's wired?
-- Q7: Does local mode survive the Postgres move, or is local just "hosted pointed at a local
-  Postgres"? (Recommended: keep a single Postgres for both; local single-user becomes a seeded
-  account. Confirm we can retire the `node:sqlite` path.)
+  and is the editable-transcript fallback acceptable as the default until that's wired? (still open)
+- ~~Q7~~ **ANSWERED (2026-06-25): single Postgres for local + hosted; retire `node:sqlite`.**
+  Local dev = a Postgres container on the laptop (temporary); **scalability is the north star**,
+  so the schema/queries target a real server-grade DB from day one. Local single-user becomes a
+  seeded account on the same Postgres.
 
 ## Build order (owner-directed, may differ from phase numbers)
 
