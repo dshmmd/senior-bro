@@ -80,9 +80,9 @@ card — for testers, partners, and early users. See D11.
   accept audio input** (text + images + PDF only) — our primary provider can't hear the candidate.
   **OpenAI** does: `gpt-4o-audio-preview` (Chat Completions `input_audio`) and the **Realtime API**
   (`gpt-4o-realtime`). **Gemini 2.x** also takes native audio. So "send the audio to the model"
-  only works on an OpenAI/Gemini path, never on Claude. **Still open for the owner:** do we add an
-  OpenAI/Gemini audio path (and on which plan — BYO-OpenAI-key vs a host audio model), or ship
-  accent-aware voice purely via the editable transcript for now? See D17.
+  only works on an OpenAI/Gemini path, never on Claude. **OWNER DECISION (2026-06-25): ship
+  accent-aware voice via the editable transcript only for now; native audio-in is deferred** (no
+  OpenAI/Gemini audio path yet). Revisit if/when an audio provider becomes a priority. See D17.
 - ~~Q7~~ **ANSWERED (2026-06-25): single Postgres for local + hosted; retire `node:sqlite`.**
   Local dev = a Postgres container on the laptop (temporary); **scalability is the north star**,
   so the schema/queries target a real server-grade DB from day one. Local single-user becomes a
@@ -320,11 +320,11 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - [x] Stop auto-sending raw STT. Add an **editable transcript** the user confirms before send
       (universal fallback). Shipped 2026-06-25: in voice mode the mic dictates into an editable
       composer; the user reviews/edits, then Sends (`web/src/pages/Interview.tsx`).
-- [ ] Where the provider supports it, send **audio directly to the model** (accent help) instead
-      of/in addition to STT. **Provider-gated (Q6/D17):** Claude can't take audio; target OpenAI
-      (`gpt-4o-audio` / realtime) or Gemini. Behind a capability seam; needs owner go-ahead on
-      which plan carries it.
-- [ ] Capability detection: pick audio-native vs. editable-transcript per configured model.
+- [ ] ~~Send **audio directly to the model**~~ **DEFERRED (owner, 2026-06-25):** native audio-in is
+      provider-gated (Claude can't take audio; only OpenAI `gpt-4o-audio`/realtime + Gemini). Owner
+      chose editable-transcript-only for now — revisit when an audio provider becomes a priority.
+- [ ] ~~Capability detection: audio-native vs. editable-transcript per model~~ — deferred with the above.
+- **Phase 16 closed for now** (editable transcript shipped; native audio deferred per owner).
 
 ### Phase 17 — UX, fuzzy targets, multi-profile & evidence-gating (R21–R24, owner 2026-06-25)
 - [ ] **R21 Back navigation:** every screen (Setup, Profile, Calibration, Plan, …) has an obvious

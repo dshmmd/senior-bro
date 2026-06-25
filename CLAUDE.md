@@ -99,11 +99,10 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   credit. (D11 · Phase 13 ✅ 2026-06-25)
 - [ ] R19: **Prompt guardrails** — users can't steer the model off the interview task
   (prompt-injection / jailbreak resistance). (D13 · Phase 14)
-- [ ] R20: **Accent-aware voice** — send audio to the model where supported, otherwise an
-  editable transcript the user confirms before sending (no more auto-sent raw STT). (D15 · Phase 16)
-  **Editable-transcript fallback shipped 2026-06-25** (voice dictates into an editable box; user
-  reviews/edits, then sends). Native audio-in is provider-gated — **Claude can't take audio**;
-  only OpenAI (gpt-4o-audio / realtime) and Gemini can. See ROADMAP Q6 + D17.
+- [x] R20: **Accent-aware voice** — editable transcript the user confirms before sending (no more
+  auto-sent raw STT). Shipped 2026-06-25 (voice dictates into an editable box; user reviews/edits,
+  then sends). Native audio-in (model hears the voice) **deferred by owner 2026-06-25** —
+  provider-gated (Claude can't take audio; only OpenAI gpt-4o-audio/realtime + Gemini). (D15/D17 · Phase 16)
 
 ### Owner additions 2026-06-25 (R21–R24)
 - [ ] R21: **Back navigation everywhere** — every screen has an obvious Back so users never get
