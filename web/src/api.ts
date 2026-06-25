@@ -18,6 +18,13 @@ export interface Profile {
   weaknesses?: Weakness[]
 }
 
+export interface ProfileListItem {
+  id: number
+  role: string
+  company: string | null
+  level: string | null
+}
+
 export interface Weakness {
   id: number
   title: string
@@ -225,6 +232,8 @@ export const api = {
     post<{ ok: boolean }>('/config', { provider, apiKey, model }),
   skills: () => request<SkillPackSummary[]>('/skills'),
   getProfile: () => request<Profile | null>('/profile'),
+  listProfiles: () => request<{ profiles: ProfileListItem[]; active_profile_id: number | null }>('/profiles'),
+  selectProfile: (id: number) => post<{ ok: boolean }>(`/profiles/${id}/select`, {}),
   createProfile: (p: {
     role: string
     company?: string

@@ -45,3 +45,10 @@ One entry per completed milestone. Read this before working on the repo.
   level-check on the default model under a 30k budget → interviews paywalled until a plan); mocked
   checkout + single-use invite redeem grant token credit; web `Plan.tsx` (topbar 💳) + admin invites.
   Local mode unrestricted. R18 done. Hosted verified by `scripts/verify-ph13.mjs`. Next = **Phase 14 (versioned prompts + guardrails)**.
+- 2026-06-25 — Voice editable transcript (R20, commit `3283d9f`) — voice no longer auto-sends raw
+  STT; the mic dictates into an editable box the user confirms before sending. Native audio deferred
+  by owner (Claude can't take audio; only OpenAI/Gemini). See ROADMAP D17/Q6.
+- [2026-06-25 — R24: Multiple profiles per user](2026-06-25-r24-multiple-profiles.md) —
+  `users.active_profile_id` (migration 0003, `AnyPgColumn` to break the circular-FK type cycle);
+  `/api/profiles` + `/select`; active-profile resolution; Dashboard switcher. Includes the
+  feat/test→main fast-forward reconciliation note. R24 done. Next = **Phase 14, or Phase 17 R21–R23**.

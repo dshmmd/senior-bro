@@ -335,9 +335,11 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - [ ] **R23 Evidence-gated knowledge:** never accept a self-reported skill as true until the user
       has answered questions demonstrating it; level/strengths reflect *shown* ability. Ties into
       calibration (R6) and weakness detection (R7).
-- [ ] **R24 Multiple profiles per user:** keep several profiles (different stack/seniority) and
-      switch between them. The DB already stores many profiles per user (`profiles.user_id`); the
-      app currently surfaces only the latest — add a picker + "new profile" without losing history.
+- [x] **R24 Multiple profiles per user** ✅ (2026-06-25): `users.active_profile_id` (migration 0003,
+      `: AnyPgColumn` annotation to break the users↔profiles circular-FK type cycle); `GET /api/profiles`
+      + `POST /api/profiles/:id/select`; profile/weaknesses/progress resolve the **active** profile
+      (falls back to latest when unset); creating a profile makes it active; Dashboard switcher pills +
+      New. Existing single-profile users unaffected.
 
 ---
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type InterviewSummary, type Profile, type Weakness } from '../api'
+import { api, type InterviewSummary, type Profile, type ProfileListItem, type Weakness } from '../api'
 import { voiceSupported } from '../voice'
 import { ReportView } from './Report'
 
@@ -9,6 +9,7 @@ export function Dashboard({
   onStartInterview,
   onResumeInterview,
   onNewProfile,
+  onProfileSwitched,
   onRecalibrate,
   onOpenProgress,
 }: {
@@ -17,11 +18,13 @@ export function Dashboard({
   onStartInterview: (mode: 'voice' | 'text', kind: 'full' | 'coaching', weaknessId?: number) => void
   onResumeInterview: (id: number, mode: 'voice' | 'text', kind: 'full' | 'coaching') => void
   onNewProfile: () => void
+  onProfileSwitched: () => void
   onRecalibrate: () => void
   onOpenProgress: () => void
 }) {
   const [history, setHistory] = useState<InterviewSummary[]>([])
   const [weaknesses, setWeaknesses] = useState<Weakness[]>([])
+  const [profiles, setProfiles] = useState<ProfileListItem[]>([])
   const [openReport, setOpenReport] = useState<number | null>(null)
   const canVoice = voiceSupported()
 
@@ -37,7 +40,20 @@ export function Dashboard({
       .listWeaknesses()
       .then(setWeaknesses)
       .catch(() => undefined)
+    api
+      .listProfiles()
+      .then((r) => setProfiles(r.profiles))
+      .catch(() => undefined)
   }, [])
+
+  // R24: switch which target role/profile the user is working in.
+  const switchProfile = (id: number) => {
+    if (id === profile.id) return
+    void api
+      .selectProfile(id)
+      .then(onProfileSwitched)
+      .catch(() => undefined)
+  }
 
   const open = weaknesses.filter((w) => w.status !== 'resolved')
   // The most recent unfinished interview is the one we offer to resume (D14).
@@ -63,6 +79,26 @@ export function Dashboard({
         {profile.level && <span className={`badge ${profile.level}`}>{profile.level}</span>}
         {email ? ` · ${email}` : ''}
       </p>
+
+      {profiles.length > 1 && (
+        <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: 'var(--muted)', fontSize: 13 }}>Profiles:</span>
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              className={p.id === profile.id ? '' : 'secondary'}
+              onClick={() => switchProfile(p.id)}
+              title={p.company ?? undefined}
+            >
+              {p.role}
+              {p.level ? ` · ${p.level}` : ''}
+            </button>
+          ))}
+          <button className="ghost" onClick={onNewProfile}>
+            + New
+          </button>
+        </div>
+      )}
 
       {resumable && (
         <div className="card" style={{ borderColor: 'var(--accent)' }}>

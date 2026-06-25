@@ -17,6 +17,7 @@ export interface User {
   plan: PlanKind
   model_id: number | null
   token_quota: number | null
+  active_profile_id: number | null
   created_at: string
 }
 
@@ -192,6 +193,8 @@ export async function createProfile(
       notes: p.notes,
     })
     .returning()
+  // A freshly created profile becomes the user's active one (R24).
+  await db.update(t.users).set({ activeProfileId: row!.id }).where(eq(t.users.id, userId))
   return toProfile(row!)
 }
 
@@ -203,6 +206,31 @@ export async function latestProfile(userId: number): Promise<Profile | null> {
     .orderBy(desc(t.profiles.id))
     .limit(1)
   return row ? toProfile(row) : null
+}
+
+/** All of a user's profiles, newest first (R24 — the "your profiles" switcher). */
+export async function listProfiles(userId: number): Promise<Profile[]> {
+  const rows = await db
+    .select()
+    .from(t.profiles)
+    .where(eq(t.profiles.userId, userId))
+    .orderBy(desc(t.profiles.id))
+  return rows.map(toProfile)
+}
+
+/** The user's active profile (their explicit choice if valid, else their latest). */
+export async function activeProfile(userId: number): Promise<Profile | null> {
+  const user = await getUser(userId)
+  if (user?.active_profile_id != null) {
+    const chosen = await getProfile(user.active_profile_id)
+    if (chosen?.user_id === userId) return chosen
+  }
+  return latestProfile(userId)
+}
+
+/** Switch the user's active profile (R24). Caller must verify ownership of `profileId`. */
+export async function setActiveProfile(userId: number, profileId: number): Promise<void> {
+  await db.update(t.users).set({ activeProfileId: profileId }).where(eq(t.users.id, userId))
 }
 
 export async function getProfile(id: number): Promise<Profile | null> {
@@ -358,6 +386,7 @@ function toUser(r: UserRow): User {
     plan: r.plan as PlanKind,
     model_id: r.modelId,
     token_quota: r.tokenQuota,
+    active_profile_id: r.activeProfileId,
     created_at: r.createdAt,
   }
 }

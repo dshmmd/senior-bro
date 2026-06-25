@@ -113,9 +113,10 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 - [ ] R23: **Evidence-gated knowledge** — don't accept a skill/claim from the user as true until
   they've actually answered questions demonstrating it; the profile/level reflects *shown*
   ability, not self-report. (Phase 17, ties into calibration R6 + weaknesses R7)
-- [ ] R24: **Multiple profiles per user** — a user can keep several profiles (different stack or
-  seniority) and switch between them. (Phase 17; the DB already stores many profiles per user —
-  the UI currently only uses the latest.)
+- [x] R24: **Multiple profiles per user** — keep several profiles (different stack/seniority) and
+  switch between them. Shipped 2026-06-25: `users.active_profile_id` (migration 0003), `/api/profiles`
+  + `/api/profiles/:id/select`, profile/weaknesses/progress read the *active* profile, Dashboard
+  switcher pills + New. (Phase 17)
 
 ## Architecture
 

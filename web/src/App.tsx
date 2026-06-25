@@ -200,6 +200,7 @@ export function App() {
             }
             onResumeInterview={(id, mode, kind) => setView({ name: 'interview', mode, kind, resumeId: id })}
             onNewProfile={() => setView({ name: 'profile' })}
+            onProfileSwitched={() => void refresh()}
             onRecalibrate={() => setView({ name: 'calibration' })}
             onOpenProgress={() => setView({ name: 'progress' })}
           />

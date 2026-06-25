@@ -1,4 +1,14 @@
-import { boolean, index, integer, pgTable, real, serial, text, timestamp } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  real,
+  serial,
+  text,
+  timestamp,
+  type AnyPgColumn,
+} from 'drizzle-orm/pg-core'
 
 /**
  * Drizzle schema (D9 / Phase 11). Mirrors the original node:sqlite tables 1:1 so
@@ -27,6 +37,12 @@ export const users = pgTable('users', {
   // models (token_quota is the credit allowance); 'byok'/'local' = free. Local owner = 'local'.
   plan: text('plan').notNull().default('free-intro'),
   tokenQuota: integer('token_quota'),
+  // The profile the user is currently working in (R24). Null → fall back to their latest.
+  // The `: AnyPgColumn` return annotation breaks the users↔profiles circular-FK type cycle
+  // (without it, Drizzle's inference collapses both tables to `any`).
+  activeProfileId: integer('active_profile_id').references((): AnyPgColumn => profiles.id, {
+    onDelete: 'set null',
+  }),
   createdAt: createdAt(),
 })
 

@@ -22,6 +22,13 @@
       "when": 1782414463082,
       "tag": "0002_last_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782416228191,
+      "tag": "0003_even_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }

@@ -508,9 +508,25 @@ api.post('/profile', async (c) => {
 
 api.get('/profile', async (c) => {
   const user = await requireUser(c)
-  const profile = await db.latestProfile(user.id)
+  const profile = await db.activeProfile(user.id)
   if (!profile) return c.json(null)
   return c.json({ ...profile, weaknesses: await db.listWeaknesses(profile.id) })
+})
+
+// All of the user's profiles + which one is active (R24 — the profile switcher).
+api.get('/profiles', async (c) => {
+  const user = await requireUser(c)
+  const profiles = await db.listProfiles(user.id)
+  const active = await db.activeProfile(user.id)
+  return c.json({ profiles, active_profile_id: active?.id ?? null })
+})
+
+// Switch the active profile (must be one of the user's own).
+api.post('/profiles/:id/select', async (c) => {
+  const user = await requireUser(c)
+  const profile = await ownProfile(user.id, Number(c.req.param('id')))
+  await db.setActiveProfile(user.id, profile.id)
+  return c.json({ ok: true })
 })
 
 // ── calibration ─────────────────────────────────────────────────────
@@ -700,7 +716,7 @@ api.delete('/interviews/:id', async (c) => {
 
 api.get('/weaknesses', async (c) => {
   const user = await requireUser(c)
-  const profile = await db.latestProfile(user.id)
+  const profile = await db.activeProfile(user.id)
   return c.json(profile ? await db.listWeaknesses(profile.id) : [])
 })
 
@@ -718,7 +734,7 @@ api.post('/weaknesses/:id/status', async (c) => {
 
 api.get('/progress', async (c) => {
   const user = await requireUser(c)
-  const profile = await db.latestProfile(user.id)
+  const profile = await db.activeProfile(user.id)
   if (!profile) return c.json(null)
   const interviews = (await db.listInterviewsForUser(user.id)).filter((i) => i.profile_id === profile.id)
   const weaknesses = await db.listWeaknesses(profile.id)
