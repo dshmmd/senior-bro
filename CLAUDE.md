@@ -105,8 +105,9 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   provider-gated (Claude can't take audio; only OpenAI gpt-4o-audio/realtime + Gemini). (D15/D17 · Phase 16)
 
 ### Owner additions 2026-06-25 (R21–R24)
-- [ ] R21: **Back navigation everywhere** — every screen has an obvious Back so users never get
-  stuck/confused. (Phase 17)
+- [x] R21: **Back navigation** — shared "← Back" in the app shell on settings/onboarding screens
+  (setup/plan/profile/calibration), shown once the user has a calibrated profile so it's never a
+  dead end. Shipped 2026-06-25 (`web/src/App.tsx`). (Phase 17)
 - [ ] R22: **Fuzzy / tiered target** — if the user doesn't know the exact company, let them pick a
   **Tier 1 / Tier 2 / …** (FAANG-tier, top-startup, mid, etc.) so setting a target is easy; the
   generated pack targets that tier's bar. Extends company packs (D10 · R14 · Phase 15/17).

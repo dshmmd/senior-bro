@@ -174,6 +174,14 @@ export function App() {
         )}
       </div>
       <div className="shell">
+        {/* R21: a Back so users never get stuck on a settings/onboarding screen. Shown only
+            when there's a real dashboard to return to (profile is calibrated) — so it's never
+            a dead end during first-run onboarding. */}
+        {profile?.level && ['setup', 'plan', 'profile', 'calibration'].includes(view.name) && (
+          <button className="ghost" onClick={() => setView({ name: 'dashboard' })}>
+            ← Back
+          </button>
+        )}
         {view.name === 'loading' && (
           <div className="card">
             Connecting to the Senior Bro server… make sure it's running (<code>npm run dev</code>).

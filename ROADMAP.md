@@ -327,8 +327,9 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - **Phase 16 closed for now** (editable transcript shipped; native audio deferred per owner).
 
 ### Phase 17 — UX, fuzzy targets, multi-profile & evidence-gating (R21–R24, owner 2026-06-25)
-- [ ] **R21 Back navigation:** every screen (Setup, Profile, Calibration, Plan, …) has an obvious
-      Back so users never get stuck; consistent placement.
+- [x] **R21 Back navigation** ✅ (2026-06-25): shared "← Back" rendered in the app shell for
+      setup/plan/profile/calibration, gated on the user having a calibrated profile (so it never
+      dead-ends during first-run onboarding). One place in `App.tsx`, no per-page edits.
 - [ ] **R22 Fuzzy/tiered target:** when the company is unknown, let the user pick a **Tier** (e.g.
       Tier 1 = FAANG-bar, Tier 2 = strong scale-up, Tier 3 = general) instead of an exact name;
       the pack/interview calibrates to that tier. Builds on Phase 15 company packs (D10).
