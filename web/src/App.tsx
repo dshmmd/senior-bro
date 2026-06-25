@@ -9,6 +9,7 @@ import { Calibration } from './pages/Calibration'
 import { Dashboard } from './pages/Dashboard'
 import { Interview } from './pages/Interview'
 import { Progress } from './pages/Progress'
+import { Plan } from './pages/Plan'
 
 export type View =
   | { name: 'landing' }
@@ -18,6 +19,7 @@ export type View =
   | { name: 'setup' }
   | { name: 'profile' }
   | { name: 'calibration' }
+  | { name: 'plan' }
   | { name: 'dashboard' }
   | { name: 'progress' }
   | {
@@ -56,16 +58,19 @@ export function App() {
       setView({ name: 'loading' })
       return
     }
+    const hosted = health.mode === 'hosted'
     setAccount({
-      hosted: health.mode === 'hosted',
+      hosted,
       email: health.user?.email ?? null,
       role: health.user?.role ?? null,
     })
-    if (health.mode === 'hosted' && !health.authed) {
+    if (hosted && !health.authed) {
       setView({ name: 'login' })
       return
     }
-    if (!health.configured) {
+    // Local mode keeps the original gate: a provider must be configured up front.
+    // Hosted mode defers it — the free level-check needs no key, then a plan is chosen.
+    if (!hosted && !health.configured) {
       setView({ name: 'setup' })
       return
     }
@@ -73,6 +78,9 @@ export function App() {
     setProfile(p)
     if (!p) setView({ name: 'profile' })
     else if (!p.level) setView({ name: 'calibration' })
+    // After the free level-check, a hosted user with no usable setup (no own key and no
+    // selected host model) must choose a plan before interviews unlock (D11).
+    else if (hosted && !health.configured && !health.has_model) setView({ name: 'plan' })
     else setView({ name: 'dashboard' })
   }, [])
 
@@ -134,6 +142,15 @@ export function App() {
             {profile.level ? ` · ${profile.level}` : ''}
           </div>
         )}
+        {account.hosted && (
+          <div
+            className="pill clickable"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setView({ name: 'plan' })}
+          >
+            💳 plan
+          </div>
+        )}
         {account.role === 'admin' && (
           <div
             className="pill clickable"
@@ -170,6 +187,9 @@ export function App() {
         {view.name === 'profile' && <ProfileSetup onDone={() => void refresh()} />}
         {view.name === 'calibration' && profile && (
           <Calibration profile={profile} onDone={() => void refresh()} />
+        )}
+        {view.name === 'plan' && (
+          <Plan onDone={() => void refresh()} onChooseByok={() => setView({ name: 'setup' })} />
         )}
         {view.name === 'dashboard' && profile && (
           <Dashboard

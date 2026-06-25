@@ -15,6 +15,13 @@
       "when": 1782409992257,
       "tag": "0001_blue_lester",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782414463082,
+      "tag": "0002_last_banshee",
+      "breakpoints": true
     }
   ]
 }

@@ -23,16 +23,27 @@ import {
 
 export const api = new Hono()
 
+/** The platform-funded free level-check budget (tokens) for `free-intro` users (D11). */
+const FREE_INTRO_TOKEN_BUDGET = 30_000
+
+/** Token packs the mocked checkout sells (real Stripe/crypto is Phase 8). */
+const CREDIT_PACKS = [100_000, 500_000, 1_000_000] as const
+
+/** What a model call is for — gates which plans may make it (D11). */
+type CallKind = 'calibration' | 'interview'
+
 /**
  * A resolved model call: which provider/key to use, plus the metering metadata
  * (catalog id + per-Mtok prices) so usage can be recorded and quotas enforced.
  * `modelId` is null for BYOK (the user's own key → no host cost, no quota).
+ * `freeIntro` = the platform's default model funding a free-intro level-check.
  */
 interface ResolvedCall {
   cfg: AppConfig
   modelId: number | null
   priceIn: number
   priceOut: number
+  freeIntro: boolean
 }
 
 async function resolveCall(user: db.User): Promise<ResolvedCall> {
@@ -45,24 +56,49 @@ async function resolveCall(user: db.User): Promise<ResolvedCall> {
       modelId: resolved.option.id,
       priceIn: resolved.option.price_in,
       priceOut: resolved.option.price_out,
+      freeIntro: false,
     }
   }
   const cfg = await db.getUserConfig(user.id)
-  if (!cfg) throw new HttpError(409, 'Not configured: set provider and API key first')
-  return { cfg, modelId: null, priceIn: 0, priceOut: 0 }
+  if (cfg) return { cfg, modelId: null, priceIn: 0, priceOut: 0, freeIntro: false }
+  // Hosted free-intro user with nothing configured: the platform's default model
+  // powers their free level-check (capped by FREE_INTRO_TOKEN_BUDGET, enforced below).
+  if (isHosted && user.plan === 'free-intro') {
+    const def = await db.defaultModel()
+    const mc = def ? await db.modelConfig(def.id) : null
+    if (def && mc)
+      return { cfg: mc.cfg, modelId: def.id, priceIn: def.price_in, priceOut: def.price_out, freeIntro: true }
+    throw new HttpError(409, 'No model is available yet — the admin needs to add one')
+  }
+  throw new HttpError(409, 'Not configured: set provider and API key first')
 }
 
-/** Resolve the requesting user + their model call in one step (401/409 otherwise). */
-async function requireCall(c: Context): Promise<{ user: db.User; call: ResolvedCall }> {
+/**
+ * Entitlement gate (D11), hosted mode only — local mode is always unrestricted.
+ * - BYOK/CLI (user's own key): free, never blocked.
+ * - free-intro on the platform default model: calibration only, under the free budget.
+ * - paid host model: requires remaining token credit (`tokens_used < token_quota`).
+ */
+async function enforceEntitlement(user: db.User, call: ResolvedCall, kind: CallKind): Promise<void> {
+  if (!isHosted) return
+  if (call.modelId === null) return
+  if (call.freeIntro) {
+    if (kind !== 'calibration')
+      throw new HttpError(402, 'Pick a plan to start interviews — the free check covers the level quiz only')
+    if ((await db.tokensUsed(user.id)) >= FREE_INTRO_TOKEN_BUDGET)
+      throw new HttpError(402, 'Your free level-check is used up — choose a plan to keep going')
+    return
+  }
+  if (user.token_quota === null || (await db.tokensUsed(user.id)) >= user.token_quota)
+    throw new HttpError(402, 'Out of token credit — add credit or redeem an invite code')
+}
+
+/** Resolve the requesting user + their model call, enforcing entitlement (401/402/409). */
+async function requireCall(c: Context, kind: CallKind): Promise<{ user: db.User; call: ResolvedCall }> {
   const user = await requireUser(c)
-  return { user, call: await resolveCall(user) }
-}
-
-/** Block a host-key call when the user is over their token quota (BYOK is never blocked). */
-async function enforceQuota(user: db.User, call: ResolvedCall): Promise<void> {
-  if (call.modelId === null || user.token_quota === null) return
-  if ((await db.tokensUsed(user.id)) >= user.token_quota)
-    throw new HttpError(402, 'token quota reached — contact the admin to raise your limit')
+  const call = await resolveCall(user)
+  await enforceEntitlement(user, call, kind)
+  return { user, call }
 }
 
 /** Run a model call, record its token usage/cost, and return the text. */
@@ -74,7 +110,6 @@ async function runModel(
   maxTokens = 4096,
   onDelta?: OnDelta,
 ): Promise<string> {
-  await enforceQuota(user, call)
   const { text, usage } = await chat(call.cfg, system, messages, maxTokens, onDelta)
   const costUsd =
     (usage.inputTokens / 1_000_000) * call.priceIn + (usage.outputTokens / 1_000_000) * call.priceOut
@@ -197,6 +232,21 @@ const modelUpdateSchema = z.object({
 const modelSelectSchema = z.object({ model_id: z.number().int().positive() })
 const quotaSchema = z.object({ token_quota: z.number().int().min(0).nullable() })
 
+const planCheckoutSchema = z.object({
+  tokens: z
+    .number()
+    .int()
+    .refine((n) => (CREDIT_PACKS as readonly number[]).includes(n), {
+      message: 'pick one of the offered token packs',
+    }),
+})
+const planRedeemSchema = z.object({ code: z.string().trim().min(3).max(64) })
+const inviteCreateSchema = z.object({
+  token_credit: z.number().int().min(1).max(1_000_000_000),
+  note: z.string().trim().max(200).optional(),
+  expires_in_days: z.number().int().min(1).max(365).nullable().default(null),
+})
+
 // ── config ──────────────────────────────────────────────────────────
 
 api.get('/health', async (c) => {
@@ -207,7 +257,9 @@ api.get('/health', async (c) => {
     mode: MODE,
     authed: user !== null,
     user: user ? { email: user.email, role: user.role } : null,
+    plan: user?.plan ?? null,
     configured,
+    has_model: user ? user.model_id !== null : false,
   })
 })
 
@@ -231,6 +283,8 @@ api.post('/config', async (c) => {
     throw new HttpError(400, `${what} failed: ${check.error ?? 'unknown'}`)
   }
   await db.setUserConfig(user.id, cfg)
+  // Bringing your own key is the free 'byok' plan (D11). Local owner stays 'local'.
+  if (isHosted) await db.setUserPlan(user.id, 'byok')
   return c.json({ ok: true, provider: cfg.provider, model: cfg.model })
 })
 
@@ -289,17 +343,42 @@ api.post('/models/select', async (c) => {
   const option = await db.getModel(model_id)
   if (!option?.enabled) throw new HttpError(404, 'model not available')
   await db.setUserModelChoice(user.id, model_id)
+  // Choosing a curated host model is the paid 'host' plan (entitlement checked per call).
+  if (isHosted) await db.setUserPlan(user.id, 'host')
   return c.json({ ok: true })
 })
 
-// The signed-in user's own usage + quota.
+// The signed-in user's own usage, plan + remaining credit (D11 billing readout).
 api.get('/usage', async (c) => {
   const user = await requireUser(c)
+  const tokensUsed = await db.tokensUsed(user.id)
   return c.json({
     usage: await db.usageSummary(user.id),
+    plan: user.plan,
     token_quota: user.token_quota,
-    tokens_used: await db.tokensUsed(user.id),
+    tokens_used: tokensUsed,
+    credit_left: user.token_quota !== null ? Math.max(0, user.token_quota - tokensUsed) : null,
+    free_intro_budget: FREE_INTRO_TOKEN_BUDGET,
   })
+})
+
+// ── plans, mocked payment & invite redemption (D11) ──────────────────
+
+// Mocked "payment": grant a token-credit pack and flip to the paid 'host' plan.
+api.post('/plan/checkout', async (c) => {
+  const user = await requireUser(c)
+  const { tokens } = await parseBody(c, planCheckoutSchema)
+  await db.grantCredit(user.id, tokens)
+  return c.json({ ok: true, plan: 'host', granted: tokens })
+})
+
+// Redeem an admin-minted invite code for its token credit (also → 'host' plan).
+api.post('/plan/redeem', async (c) => {
+  const user = await requireUser(c)
+  const { code } = await parseBody(c, planRedeemSchema)
+  const granted = await db.redeemInviteCode(code.trim(), user.id)
+  if (granted === null) throw new HttpError(400, 'that invite code is invalid, expired, or already used')
+  return c.json({ ok: true, plan: 'host', granted })
 })
 
 // ── admin (model/key management, users, usage console) ───────────────
@@ -379,6 +458,32 @@ api.post('/admin/users/:id/quota', async (c) => {
   return c.json({ ok: true })
 })
 
+// ── admin: invite codes (token-credit codes for testers/partners) ────
+
+api.get('/admin/invites', async (c) => {
+  await requireAdmin(c)
+  return c.json(await db.listInviteCodes())
+})
+
+api.post('/admin/invites', async (c) => {
+  await requireAdmin(c)
+  const body = await parseBody(c, inviteCreateSchema)
+  const code = `SB-${randomToken(4).toUpperCase()}`
+  const created = await db.createInviteCode({
+    code,
+    tokenCredit: body.token_credit,
+    note: body.note ?? null,
+    expiresInDays: body.expires_in_days,
+  })
+  return c.json(created)
+})
+
+api.post('/admin/invites/:code/revoke', async (c) => {
+  await requireAdmin(c)
+  await db.revokeInviteCode(c.req.param('code'))
+  return c.json({ ok: true })
+})
+
 // ── skills ──────────────────────────────────────────────────────────
 
 api.get('/skills', (c) =>
@@ -411,7 +516,7 @@ api.get('/profile', async (c) => {
 // ── calibration ─────────────────────────────────────────────────────
 
 api.post('/calibration/start', async (c) => {
-  const { user, call } = await requireCall(c)
+  const { user, call } = await requireCall(c, 'calibration')
   const { profile_id } = await parseBody(c, calibrationStartSchema)
   const profile = await ownProfile(user.id, profile_id)
   const raw = await runModel(user, call, 'You generate interview calibration questions as JSON.', [
@@ -423,7 +528,7 @@ api.post('/calibration/start', async (c) => {
 })
 
 api.post('/calibration/submit', async (c) => {
-  const { user, call } = await requireCall(c)
+  const { user, call } = await requireCall(c, 'calibration')
   const { calibration_id, answers } = await parseBody(c, calibrationSubmitSchema)
   const calibration = await db.getCalibration(calibration_id)
   if (!calibration) throw new HttpError(404, 'calibration not found')
@@ -457,7 +562,7 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '').trim()
 
 api.post('/interviews', async (c) => {
-  const { user, call } = await requireCall(c)
+  const { user, call } = await requireCall(c, 'interview')
   const body = await parseBody(c, interviewSchema)
   const profile = await ownProfile(user.id, body.profile_id)
 
@@ -494,7 +599,7 @@ api.post('/interviews', async (c) => {
 })
 
 api.post('/interviews/:id/messages', async (c) => {
-  const { user, call } = await requireCall(c)
+  const { user, call } = await requireCall(c, 'interview')
   const id = Number(c.req.param('id'))
   const interview = await ownInterview(user.id, id)
   if (interview.status !== 'active') throw new HttpError(409, 'interview already finished')
@@ -536,7 +641,7 @@ api.post('/interviews/:id/messages', async (c) => {
 })
 
 api.post('/interviews/:id/finish', async (c) => {
-  const { user, call } = await requireCall(c)
+  const { user, call } = await requireCall(c, 'interview')
   const id = Number(c.req.param('id'))
   const interview = await ownInterview(user.id, id)
   if (interview.status === 'finished') return c.json(interview.report)

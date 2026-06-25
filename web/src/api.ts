@@ -150,12 +150,16 @@ async function ssePost<T>(path: string, body: unknown, onDelta: (text: string) =
   return result.value
 }
 
+export type PlanKind = 'free-intro' | 'host' | 'byok' | 'local'
+
 export interface Health {
   ok: boolean
   mode: 'local' | 'hosted'
   authed: boolean
   user: { email: string | null; role: 'user' | 'admin' } | null
+  plan: PlanKind | null
   configured: boolean
+  has_model: boolean
 }
 
 export interface ModelOption {
@@ -178,8 +182,22 @@ export interface UsageInfo {
     cost_usd: number
     events: number
   }
+  plan: PlanKind
   token_quota: number | null
   tokens_used: number
+  credit_left: number | null
+  free_intro_budget: number
+}
+
+export interface InviteCode {
+  code: string
+  token_credit: number
+  note: string | null
+  revoked: boolean
+  redeemed_by: number | null
+  redeemed_at: string | null
+  expires_at: string | null
+  created_at: string
 }
 
 export interface AdminUserRow {
@@ -244,6 +262,11 @@ export const api = {
   models: () => request<{ models: ModelOption[]; selected_model_id: number | null }>('/models'),
   selectModel: (model_id: number) => post<{ ok: boolean }>('/models/select', { model_id }),
   usage: () => request<UsageInfo>('/usage'),
+  // plans, mocked payment & invite redemption (D11)
+  planCheckout: (tokens: number) =>
+    post<{ ok: boolean; plan: PlanKind; granted: number }>('/plan/checkout', { tokens }),
+  redeemCode: (code: string) =>
+    post<{ ok: boolean; plan: PlanKind; granted: number }>('/plan/redeem', { code }),
   // admin
   adminListModels: () => request<ModelOption[]>('/admin/models'),
   adminCreateModel: (m: {
@@ -271,4 +294,9 @@ export const api = {
   adminListUsers: () => request<AdminUserRow[]>('/admin/users'),
   adminSetQuota: (id: number, token_quota: number | null) =>
     post<{ ok: boolean }>(`/admin/users/${id}/quota`, { token_quota }),
+  adminListInvites: () => request<InviteCode[]>('/admin/invites'),
+  adminCreateInvite: (m: { token_credit: number; note?: string; expires_in_days: number | null }) =>
+    post<InviteCode>('/admin/invites', m),
+  adminRevokeInvite: (code: string) =>
+    post<{ ok: boolean }>(`/admin/invites/${encodeURIComponent(code)}/revoke`, {}),
 }

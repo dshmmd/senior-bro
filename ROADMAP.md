@@ -99,9 +99,9 @@ card — for testers, partners, and early users. See D11.
   1. ~~**Phase 11 — Postgres/Docker foundation** (D9)~~ ✅ **shipped 2026-06-25.**
   2. ~~**Phase 12 — Identity & resumable sessions** (D14)~~ ✅ **shipped 2026-06-25.**
      Returning-user "welcome back", resume an interrupted interview, DB-level FKs/indexes.
-  3. **Phase 13 — Plans, gating & invite codes** (D11) ⬅ recommended next. Free level-check → plan choice;
-     mocked payment; admin-minted credit codes. Builds on Phase 8 metering.
-  4. **Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13).
+  3. ~~**Phase 13 — Plans, gating & invite codes** (D11)~~ ✅ **shipped 2026-06-25.**
+     Free level-check → plan gate; mocked checkout; admin-minted invite-code credit; per-call entitlement.
+  4. **Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13) ⬅ recommended next.
   5. **Phase 15 — Dynamic company skill packs** (D10).
   6. **Phase 16 — Accent-aware voice** (D15).
   > Rationale for ordering: 11 unblocks all storage; 12/13 make hosted usable + monetizable;
@@ -270,16 +270,26 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
       Route-level ownership guards (`ownProfile`/`ownInterview`) reviewed; all reads stay user-scoped.
 - **Gate: owner reviews before Phase 13 (plans, gating & invite codes).**
 
-### Phase 13 — Plans, gating & invite codes (D11)
-- [ ] Plan model: `free-intro`, `host-models` (paid), `byok` (free), `local-cli` (free).
-- [ ] **Free level-check**: a very short calibration interview runs with no plan; after it,
-      gate further interviews behind a plan choice.
-- [ ] Entitlement check server-side before any paid (host-key) call; friendly paywall UX.
-- [ ] **Mocked payment** flow (choose plan → "pay" → entitlement granted); pluggable for real
-      Stripe/crypto later (Phase 8).
-- [ ] **Invite codes**: admin mints codes with a credit balance + expiry; redeeming credits a
-      user; credit is decremented by metered usage. Admin console to create/list/revoke codes.
-- [ ] User billing/usage page: current plan, credit left, usage this period.
+### Phase 13 — Plans, gating & invite codes (D11) ✅ (2026-06-25)
+- [x] Plan model: `users.plan` ∈ `free-intro` (default) / `host` (paid) / `byok` (free) /
+      `local` (the implicit local owner). Hosted-only gating; local mode stays unrestricted.
+- [x] **Free level-check**: a free-intro hosted user with no key/model still runs calibration —
+      `resolveCall` falls back to the admin **default model**, capped by `FREE_INTRO_TOKEN_BUDGET`
+      (30k). Interviews are blocked until a plan is chosen.
+- [x] Entitlement check server-side before any paid call — `enforceEntitlement(user, call, kind)`
+      folds in the old quota: free-intro→calibration-only under budget; host→needs remaining token
+      credit (402); BYOK/local→free. Friendly paywall copy surfaced in the web UI.
+- [x] **Mocked payment**: `POST /api/plan/checkout` grants a token-credit pack (100k/500k/1M) and
+      flips the user to `host`. Pluggable for real Stripe/crypto later (Phase 8).
+- [x] **Invite codes**: `invite_codes` table; admin `GET/POST /api/admin/invites` +
+      `/revoke`; `POST /api/plan/redeem` is single-use, not-expired, not-revoked → grants credit
+      (→ host). Credit (= `token_quota`) is decremented by metered `tokens_used`. Admin console
+      section (mint/list/revoke) in `Admin.tsx`.
+- [x] User billing/usage page: `GET /api/usage` returns plan + `credit_left` + `tokens_used`; the
+      web **Plan page** (topbar 💳) shows it and handles checkout/redeem/model-pick/BYOK.
+- Verified: `make check` + `make e2e` (local) green; hosted gating proven end-to-end by
+  `scripts/verify-ph13.mjs` (free check → 402 paywall → redeem → select model → metered interview).
+- **Gate: owner reviews before Phase 14 (admin-managed versioned prompts + guardrails).**
 
 ### Phase 14 — Admin-managed versioned prompts + guardrails (D12, D13)
 - [ ] Move prompts from `server/src/prompts.ts` constants into a DB table:

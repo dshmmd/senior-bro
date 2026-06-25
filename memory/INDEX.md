@@ -40,3 +40,8 @@ One entry per completed milestone. Read this before working on the repo.
   resume an interrupted interview from the server transcript (`resumeId` in `Interview`, Dashboard
   resume banner + `DELETE /api/interviews/:id` discard); "Welcome back" greeting; DB-level FKs +
   indexes (migration 0001) for per-user partitioning. R15 done. Next = **Phase 13 (plans & invite codes)**.
+- [2026-06-25 — Phase 13: Plans, gating & invite codes](2026-06-25-phase13-plans-gating-invites.md) —
+  `users.plan` + `invite_codes` (migration 0002); hosted gating via `enforceEntitlement` (free-intro
+  level-check on the default model under a 30k budget → interviews paywalled until a plan); mocked
+  checkout + single-use invite redeem grant token credit; web `Plan.tsx` (topbar 💳) + admin invites.
+  Local mode unrestricted. R18 done. Hosted verified by `scripts/verify-ph13.mjs`. Next = **Phase 14 (versioned prompts + guardrails)**.

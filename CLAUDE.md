@@ -11,8 +11,9 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > below are superseded — durable Postgres store on Docker (**D9 ✅ Phase 11 shipped** —
 > `node:sqlite` retired), dynamic company-pack generation (D10, supersedes "one company =
 > one file"), admin-managed versioned prompts (D12, prompts leave `prompts.ts`). Read
-> ROADMAP Phases 11–16 before new work. **Phase 12 ✅ shipped** (resumable interviews +
-> returning-user "welcome back" + DB-level FKs/indexes); **next up = Phase 13 (plans, gating & invite codes)**.
+> ROADMAP Phases 11–16 before new work. **Phases 12 & 13 ✅ shipped** (12: resumable interviews +
+> returning-user "welcome back" + DB-level FKs/indexes; 13: plans/gating + free level-check +
+> mocked checkout + invite-code credit); **next up = Phase 14 (admin-managed versioned prompts + guardrails)**.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -89,9 +90,9 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   migrations, strict per-user partitioning. (D9 · Phase 11)
 - [ ] R17: **Admin-managed, versioned system prompts** — edit/improve in the admin UI with
   version history + rollback; guardrail frame stays fixed. (D12 · Phase 14)
-- [ ] R18: **Plans & gating** — free short level-check, then choose a plan: host-models (paid,
+- [x] R18: **Plans & gating** — free short level-check, then choose a plan: host-models (paid,
   mocked payment) / BYO key (free) / local CLI (free); **admin-minted invite codes** carry
-  credit. (D11 · Phase 13)
+  credit. (D11 · Phase 13 ✅ 2026-06-25)
 - [ ] R19: **Prompt guardrails** — users can't steer the model off the interview task
   (prompt-injection / jailbreak resistance). (D13 · Phase 14)
 - [ ] R20: **Accent-aware voice** — send audio to the model where supported, otherwise an
@@ -104,9 +105,10 @@ senior-bro (npm workspace monorepo)
 ├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/schema.ts     Drizzle table definitions (9 tables); migrations in server/drizzle/
+│   ├── src/schema.ts     Drizzle table definitions (10 tables, FKs+indexes); migrations in server/drizzle/
 │   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
 │   │                     sessions/magic_links + per-user config + isolation + models + usage_events
+│   │                     + plans/credit (users.plan, token_quota) + invite_codes (D11)
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
@@ -121,8 +123,9 @@ senior-bro (npm workspace monorepo)
 ├── web/      React + Vite SPA
 │   ├── src/voice.ts      Web Speech API wrapper (STT + TTS)
 │   ├── src/api.ts        typed client for server API (cookie-authed)
-│   └── src/pages/        Login(hosted) → Setup → Profile → Calibration → Interview → Report → Dashboard;
-│                         Admin(hosted, role=admin): model/key mgmt, user quotas, usage
+│   └── src/pages/        Login(hosted) → Profile → Calibration(free level-check) → Plan(hosted gate) →
+│                         Setup → Interview → Report → Dashboard; Plan = plans/mock-checkout/invite redeem;
+│                         Admin(hosted, role=admin): model/key mgmt, user quotas, usage, invite codes
 ├── skills/   company interview packs (markdown + frontmatter)
 └── memory/   milestone log (INDEX.md + one file per milestone)
 ```

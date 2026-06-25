@@ -14,8 +14,23 @@ export interface User {
   id: number
   email: string | null
   role: 'user' | 'admin'
+  plan: PlanKind
   model_id: number | null
   token_quota: number | null
+  created_at: string
+}
+
+/** Entitlement plan (D11). 'local' = the implicit local owner (always entitled). */
+export type PlanKind = 'free-intro' | 'host' | 'byok' | 'local'
+
+export interface InviteCode {
+  code: string
+  token_credit: number
+  note: string | null
+  revoked: boolean
+  redeemed_by: number | null
+  redeemed_at: string | null
+  expires_at: string | null
   created_at: string
 }
 
@@ -110,7 +125,7 @@ async function seed(): Promise<void> {
   // Stable local owner (also the bootstrap admin); explicit id so local mode never auths.
   await db
     .insert(t.users)
-    .values({ id: LOCAL_USER_ID, email: 'local@senior-bro', role: 'admin' })
+    .values({ id: LOCAL_USER_ID, email: 'local@senior-bro', role: 'admin', plan: 'local' })
     .onConflictDoNothing()
   // Inserting an explicit id leaves the serial sequence behind — advance it past max(id).
   await db.execute(
@@ -340,6 +355,7 @@ function toUser(r: UserRow): User {
     id: r.id,
     email: r.email,
     role: r.role as 'user' | 'admin',
+    plan: r.plan as PlanKind,
     model_id: r.modelId,
     token_quota: r.tokenQuota,
     created_at: r.createdAt,
@@ -411,6 +427,21 @@ export async function setUserQuota(userId: number, quota: number | null): Promis
   await db.update(t.users).set({ tokenQuota: quota }).where(eq(t.users.id, userId))
 }
 
+export async function setUserPlan(userId: number, plan: PlanKind): Promise<void> {
+  await db.update(t.users).set({ plan }).where(eq(t.users.id, userId))
+}
+
+/**
+ * Grant token credit (D11). Adds to the existing allowance and flips the user to the
+ * paid 'host' plan — used by mocked checkout and invite-code redemption.
+ */
+export async function grantCredit(userId: number, tokens: number): Promise<void> {
+  await db
+    .update(t.users)
+    .set({ tokenQuota: sql`COALESCE(${t.users.tokenQuota}, 0) + ${tokens}`, plan: 'host' })
+    .where(eq(t.users.id, userId))
+}
+
 export async function listUsers(): Promise<User[]> {
   const rows = await db.select().from(t.users).orderBy(t.users.id)
   return rows.map(toUser)
@@ -472,6 +503,16 @@ export async function listModels(enabledOnly = false): Promise<ModelOption[]> {
 
 export async function getModel(id: number): Promise<ModelOption | null> {
   const [row] = await db.select().from(t.models).where(eq(t.models.id, id))
+  return row ? toModel(row) : null
+}
+
+/** The enabled default model — powers the free level-check for free-intro users (D11). */
+export async function defaultModel(): Promise<ModelOption | null> {
+  const [row] = await db
+    .select()
+    .from(t.models)
+    .where(and(eq(t.models.enabled, true), eq(t.models.isDefault, true)))
+    .limit(1)
   return row ? toModel(row) : null
 }
 
@@ -597,4 +638,73 @@ export async function usageSummary(userId: number): Promise<UsageSummary> {
     cost_usd: row?.cost_usd ?? 0,
     events: row?.events ?? 0,
   }
+}
+
+// ── invite codes (admin-minted token credit) ─────────────────────────
+
+type InviteRow = typeof t.inviteCodes.$inferSelect
+
+function toInvite(r: InviteRow): InviteCode {
+  return {
+    code: r.code,
+    token_credit: r.tokenCredit,
+    note: r.note,
+    revoked: r.revoked,
+    redeemed_by: r.redeemedBy,
+    redeemed_at: r.redeemedAt,
+    expires_at: r.expiresAt,
+    created_at: r.createdAt,
+  }
+}
+
+export async function createInviteCode(c: {
+  code: string
+  tokenCredit: number
+  note: string | null
+  expiresInDays: number | null
+}): Promise<InviteCode> {
+  const [row] = await db
+    .insert(t.inviteCodes)
+    .values({
+      code: c.code,
+      tokenCredit: c.tokenCredit,
+      note: c.note,
+      expiresAt: c.expiresInDays !== null ? future(c.expiresInDays * 86_400_000) : null,
+    })
+    .returning()
+  return toInvite(row!)
+}
+
+export async function listInviteCodes(): Promise<InviteCode[]> {
+  const rows = await db.select().from(t.inviteCodes).orderBy(desc(t.inviteCodes.createdAt))
+  return rows.map(toInvite)
+}
+
+/** Revoke an unused code (a redeemed one keeps its record). */
+export async function revokeInviteCode(code: string): Promise<void> {
+  await db.update(t.inviteCodes).set({ revoked: true }).where(eq(t.inviteCodes.code, code))
+}
+
+/**
+ * Redeem a code for a user: single-use, not revoked, not expired. Atomically marks it
+ * redeemed (guards a double-spend) then grants its credit. Returns the granted tokens,
+ * or null if the code can't be redeemed.
+ */
+export async function redeemInviteCode(code: string, userId: number): Promise<number | null> {
+  const result = await db
+    .update(t.inviteCodes)
+    .set({ redeemedBy: userId, redeemedAt: future(0) })
+    .where(
+      and(
+        eq(t.inviteCodes.code, code),
+        eq(t.inviteCodes.revoked, false),
+        sql`${t.inviteCodes.redeemedBy} IS NULL`,
+        sql`(${t.inviteCodes.expiresAt} IS NULL OR ${t.inviteCodes.expiresAt} > now())`,
+      ),
+    )
+    .returning({ credit: t.inviteCodes.tokenCredit })
+  const granted = result[0]?.credit
+  if (granted === undefined) return null
+  await grantCredit(userId, granted)
+  return granted
 }

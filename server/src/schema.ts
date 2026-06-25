@@ -23,6 +23,9 @@ export const users = pgTable('users', {
   apiKeyEnc: text('api_key_enc'),
   // The currently-selected curated model; nulled (not blocked) if that model is deleted.
   modelId: integer('model_id').references(() => models.id, { onDelete: 'set null' }),
+  // Plan & entitlement (D11 / Phase 13). 'free-intro' = level-check only; 'host' = paid host
+  // models (token_quota is the credit allowance); 'byok'/'local' = free. Local owner = 'local'.
+  plan: text('plan').notNull().default('free-intro'),
   tokenQuota: integer('token_quota'),
   createdAt: createdAt(),
 })
@@ -148,3 +151,17 @@ export const usageEvents = pgTable(
   },
   (t) => [index('usage_events_user_id_idx').on(t.userId)],
 )
+
+// Admin-minted invite codes (D11 / Phase 13). Each carries a token-denominated credit
+// (Q3); redeeming adds it to the redeemer's quota and upgrades them to the 'host' plan.
+// Single-use: `redeemedBy`/`redeemedAt` are set once; `revoked` blocks an unused code.
+export const inviteCodes = pgTable('invite_codes', {
+  code: text('code').primaryKey(),
+  tokenCredit: integer('token_credit').notNull(),
+  note: text('note'),
+  revoked: boolean('revoked').notNull().default(false),
+  redeemedBy: integer('redeemed_by').references(() => users.id, { onDelete: 'set null' }),
+  redeemedAt: timestamp('redeemed_at', { mode: 'string' }),
+  expiresAt: timestamp('expires_at', { mode: 'string' }),
+  createdAt: createdAt(),
+})
