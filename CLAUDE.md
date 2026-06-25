@@ -23,6 +23,8 @@ Do this, in order, before writing any code. It rebuilds full context in ~1 min:
 2. Read **`memory/INDEX.md`** and the newest `memory/*.md` entry — what's done, why,
    and the gotchas.
 3. Run **`make check`** to confirm the tree is green before changing anything.
+   **Requires Docker running** — data is in PostgreSQL via `docker compose`; the `make`
+   targets auto-run `db-up`. If Docker is down, start it (or `make db-up`) first.
 4. Pick the work: honor the "Build order (owner-directed)" note in ROADMAP if
    present; otherwise take the lowest unfinished phase. Each phase ends at an
    **owner-review gate** — finish the phase, verify, push, then stop and summarize.

@@ -32,10 +32,14 @@ const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1',
 if (exists.rowCount === 0) await admin.query(`CREATE DATABASE ${dbName}`)
 await admin.end()
 
-// 3. Wipe it to an empty public schema (the server re-migrates on boot).
+// 3. Wipe it to an empty schema so the server re-migrates on boot. Drop the
+//    `drizzle` schema too — that's where Drizzle records applied migrations, and
+//    leaving it would make the migrator skip recreating the (just-dropped) tables.
 const test = new Client({ connectionString: E2E_DATABASE_URL })
 await test.connect()
-await test.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+await test.query(
+  'DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;',
+)
 await test.end()
 
 console.log(`e2e prepared: ${dbName} wiped, mock config in .e2e-home`)

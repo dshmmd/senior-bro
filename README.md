@@ -41,6 +41,7 @@ works in local mode (the CLI runs on your own machine).
 ## Requirements
 
 - **Node.js ≥ 22.5** (`node --version`)
+- **Docker** (the server stores data in PostgreSQL, run via `docker compose`)
 - One of the four power options above
 - For voice mode: Chrome, Edge, or Safari (uses the built-in Web Speech API — free, no extra key)
 
@@ -50,8 +51,7 @@ works in local mode (the CLI runs on your own machine).
 git clone https://github.com/dshmmd/senior-bro.git
 cd senior-bro
 npm install
-npm run build
-npm start
+make start          # starts Postgres (Docker), builds, and serves on :4747
 ```
 
 Open **http://localhost:4747**, pick how to power it (a subscription or an API key), and start interviewing.
@@ -60,24 +60,29 @@ Open **http://localhost:4747**, pick how to power it (a subscription or an API k
 
 ```bash
 npm install
-npm run dev      # server on :4747 + hot-reloading web app on :5173
+make dev            # Postgres + server on :4747 + hot-reloading web app on :5173
 ```
 
-Open **http://localhost:5173**.
+Open **http://localhost:5173**. (`make dev` runs `make db-up` first; `make db-down` stops Postgres.)
 
 ## Other commands
 
 ```bash
-npm run typecheck   # strict TS check on both workspaces
-npm run smoke       # boot the built server and verify key endpoints
+make check          # full gate: lint + typecheck + build + smoke (boots Postgres)
+make db-up          # start Postgres only;  make db-reset wipes its data volume
+make db-generate    # regenerate Drizzle migrations after editing server/src/schema.ts
 ```
+
+`DATABASE_URL` defaults to `postgres://senior:senior@localhost:5433/senior_bro`
+(see `.env.example`). To bring older data from `~/.senior-bro/data.db` into Postgres,
+run `node scripts/import-sqlite.mjs` once.
 
 ## Project layout
 
 ```
-server/   Hono API + interview engine (node:sqlite, zero native deps)
+server/   Hono API + interview engine (PostgreSQL via Drizzle ORM, Docker)
 web/      React SPA — voice layer is browser-native Web Speech API
-skills/   company interview playbooks (markdown — add your own!)
+skills/   company interview playbooks (markdown seed packs; dynamic generation is on the roadmap)
 memory/   build log for AI agents working on this repo
 CLAUDE.md requirements, architecture, and agent working rules
 ```
@@ -107,6 +112,6 @@ The app is a single Node package with a `senior-bro` bin. Publishing path:
 
 ## Privacy
 
-- API key: `~/.senior-bro/config.json` (chmod 600), never leaves your machine
-- Interviews & reports: `~/.senior-bro/data.db` (SQLite)
+- API keys: encrypted at rest (AES-256-GCM) in the database, never sent anywhere but your chosen AI provider
+- Interviews & reports: PostgreSQL (`docker compose`, on your own machine in local/dev)
 - Voice never touches a server — speech-to-text and text-to-speech run inside your browser
