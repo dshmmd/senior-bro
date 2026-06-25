@@ -32,3 +32,7 @@ One entry per completed milestone. Read this before working on the repo.
   docs-only. New scope: Postgres/Docker store (supersedes node:sqlite + zero-deps rule),
   dynamic company packs, plans + invite codes, admin-versioned prompts + guardrails,
   resumable sessions, accent voice. Phases 11–16; recommended next = **Phase 11 (Postgres)**.
+- [2026-06-25 — Phase 11: Postgres + Drizzle](2026-06-25-phase11-postgres-drizzle.md) —
+  retired node:sqlite for **PostgreSQL (Docker) via Drizzle ORM**; async db layer behind the
+  same function names; docker-compose + Make/CI/e2e wired to Postgres; sqlite→pg import script.
+  make check + e2e + hosted curl all green on PG. Next = **Phase 12 (identity & resume)**.

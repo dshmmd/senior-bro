@@ -95,11 +95,10 @@ card — for testers, partners, and early users. See D11.
 - 2026-06-25: **owner re-planning** (D9–D15 added). New near-term scope: durable Postgres
   store on Docker, dynamic company-pack generation, plans + gating + invite codes,
   admin-managed versioned prompts + guardrails, resumable sessions, accent-aware voice.
-  These become **Phases 11–16**. **Recommended build order (owner to confirm at this gate):**
-  1. **Phase 11 — Postgres/Docker foundation** (D9). Foundational; every new table
-     (prompts, company packs, credits, plans) wants a real DB + migrations. Do first.
-  2. **Phase 12 — Identity & resumable sessions** (D14). Recognize returning users; resume
-     an interrupted interview.
+  These become **Phases 11–16**. **Recommended build order:**
+  1. ~~**Phase 11 — Postgres/Docker foundation** (D9)~~ ✅ **shipped 2026-06-25.**
+  2. **Phase 12 — Identity & resumable sessions** (D14) ⬅ recommended next. Recognize
+     returning users; resume an interrupted interview.
   3. **Phase 13 — Plans, gating & invite codes** (D11). Free level-check → plan choice;
      mocked payment; admin-minted credit codes. Builds on Phase 8 metering.
   4. **Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13).
@@ -236,19 +235,24 @@ here must be **configurable from the admin UI with no redeploy** ("configurable 
 
 ## Phases 11–16 — owner re-planning 2026-06-25 (D9–D15)
 
-### Phase 11 — Postgres/Docker datastore foundation (D9)  ⬅ recommended next
-Replace `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + hosted.
-- [ ] `docker compose` with Postgres 16 + a volume; `.env` for `DATABASE_URL`; Make targets
-      (`make db-up` / `make db-down` / `make db-migrate`).
-- [ ] Data-access + migration layer (Drizzle ORM recommended — confirm Q5). Define schema
-      for everything that exists today: users, sessions, magic_links, profiles, calibrations,
-      interviews, weaknesses, models, usage_events.
-- [ ] Port every `server/src/db.ts` query to the new layer behind the **same function
-      signatures** so routes don't change; keep encryption-at-rest for secrets.
-- [ ] Migration/import path for existing `~/.senior-bro/data.db` rows (one-time script).
-- [ ] Update CLAUDE.md architecture + `make check`/CI to boot Postgres (service container).
-- [ ] Decide local-mode story (Q7): single seeded account on the same Postgres.
-- **Gate: owner reviews before Phase 12.** Supersedes the zero-deps rule for the server.
+### Phase 11 — Postgres/Docker datastore foundation (D9) ✅ (2026-06-25)
+Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + hosted.
+- [x] `docker compose` with Postgres 16 + a named volume; `.env.example` for `DATABASE_URL`;
+      Make targets (`db-up`/`db-down`/`db-reset`/`db-generate`/`db-migrate`).
+- [x] Data-access + migration layer = **Drizzle ORM** (`server/src/schema.ts`,
+      `drizzle.config.ts`, generated `server/drizzle/`). Schema covers all 9 tables.
+- [x] Ported every `server/src/db.ts` query to Drizzle behind the **same function names**
+      (now async). Rippled `await` through auth/admin/routes/index; encryption-at-rest kept.
+- [x] One-time import script `scripts/import-sqlite.mjs` (legacy `~/.senior-bro/data.db` →
+      Postgres, ids preserved, ON CONFLICT DO NOTHING, sequences bumped). Ran it on owner's data.
+- [x] `make check` + CI boot Postgres (compose locally; a `postgres:16` service in CI).
+      e2e isolates a `senior_bro_test` DB via `e2e/prepare.mjs` (runs before Playwright,
+      since the webServer boots before globalSetup).
+- [x] Local-mode story (Q7): single Postgres for both; the implicit owner is a seeded
+      account (id 1). `node:sqlite` retired.
+- **Gate: owner reviews before Phase 12.** Superseded the zero-deps rule for the server.
+- Known follow-up: `cost_usd` is stored as `real` (float) → minor precision drift; revisit
+  with `numeric` if/when real billing lands (billing is token-denominated anyway, D11/Q3).
 
 ### Phase 12 — Identity & resumable sessions (D14)
 - [ ] Returning-user recognition: durable session (already cookie-based) + "welcome back";

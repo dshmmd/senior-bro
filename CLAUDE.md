@@ -8,10 +8,10 @@ detect weaknesses, and coach them until they're ready. Powered by **our host mod
 via the local CLI (free, local only)** — see plans in ROADMAP D11.
 
 > **2026-06-25 owner re-planning in flight (D9–D15, Phases 11–16).** Several rules
-> below are being superseded — durable Postgres store on Docker (D9, supersedes the
-> zero-deps/`node:sqlite` rule), dynamic company-pack generation (D10, supersedes
-> "one company = one file"), admin-managed versioned prompts (D12, prompts leave
-> `prompts.ts`). Read ROADMAP Phases 11–16 before starting new work.
+> below are superseded — durable Postgres store on Docker (**D9 ✅ Phase 11 shipped** —
+> `node:sqlite` retired), dynamic company-pack generation (D10, supersedes "one company =
+> one file"), admin-managed versioned prompts (D12, prompts leave `prompts.ts`). Read
+> ROADMAP Phases 11–16 before new work; **next up = Phase 12 (identity & resumable sessions)**.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -40,11 +40,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 2. When a plan item below is completed, mark it `[x]` here AND append a short
    entry to `memory/` (one file per milestone, linked from `memory/INDEX.md`).
 3. Verification gate before any commit: `make check` (lint + typecheck + build + smoke).
-   Run `make e2e` too when a UI flow changed. (From Phase 11, `make check` needs Postgres up.)
-4. One language everywhere: TypeScript. ~~No new runtime deps; we use `node:sqlite`~~
-   **SUPERSEDED by D9 (2026-06-25):** the server moves to **PostgreSQL in Docker** with a
-   typed migration layer (Drizzle recommended). Deps that buy real robustness are now fine;
-   still avoid gratuitous ones. The web app keeps its tiny-bundle discipline (D1).
+   Run `make e2e` too when a UI flow changed. **`make check` needs Docker/Postgres up**
+   (the `make` targets run `db-up` first; `make db-up` starts the container).
+4. One language everywhere: TypeScript. Server data lives in **PostgreSQL (Docker)** via
+   **Drizzle ORM** (`server/src/schema.ts` + generated `server/drizzle/` migrations); db
+   queries are async. Deps that buy real robustness are fine (D9 retired the zero-deps rule
+   for the server); still avoid gratuitous ones. The web app keeps its tiny-bundle discipline (D1).
 5. User-facing strings live in the React components. ~~Prompts live in `prompts.ts`~~
    **Being superseded by D12:** prompts move into the DB (admin-editable, versioned); code
    ships the seed/default version. Until Phase 14 lands, `server/src/prompts.ts` is still
@@ -97,11 +98,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 
 ```
 senior-bro (npm workspace monorepo)
-├── server/   Hono + node:sqlite (→ PostgreSQL/Docker per D9, Phase 11). API + built web app. Port 4747.
+├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/db.ts         sqlite schema & queries (~/.senior-bro/data.db); users/sessions/
-│   │                     magic_links + per-user config + isolation + models catalog + usage_events
+│   ├── src/schema.ts     Drizzle table definitions (9 tables); migrations in server/drizzle/
+│   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
+│   │                     sessions/magic_links + per-user config + isolation + models + usage_events
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
@@ -145,8 +147,15 @@ Key flows:
 
 ```bash
 npm install            # install everything (workspaces)
-npm run dev            # server :4747 + vite :5173 with proxy
+make db-up             # start Postgres in Docker (required before dev/start/check)
+make dev               # Postgres + server :4747 + vite :5173 with proxy
 npm run build          # build web → web/dist, typecheck server
 npm run typecheck      # tsc --noEmit in both workspaces
-npm start              # production: serve built app on http://localhost:4747
+make check             # full gate: lint + typecheck + build + smoke (boots Postgres)
+make start             # production: serve built app on http://localhost:4747
+make db-generate       # generate a Drizzle migration after editing server/src/schema.ts
+node scripts/import-sqlite.mjs  # one-time: legacy ~/.senior-bro/data.db → Postgres
 ```
+
+> Server data lives in Postgres (`DATABASE_URL`, default `…@localhost:5433/senior_bro`).
+> Copy `.env.example` → `.env` for local dev. `make db-reset` wipes the data volume.

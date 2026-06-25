@@ -13,30 +13,30 @@ const SESSION_TTL_DAYS = 30
  * - local mode: always the implicit owner (no auth).
  * - hosted mode: the user behind a valid session cookie, or 401.
  */
-export function requireUser(c: Context): db.User {
+export async function requireUser(c: Context): Promise<db.User> {
   if (!isHosted) {
-    const local = db.getUser(LOCAL_USER_ID)
+    const local = await db.getUser(LOCAL_USER_ID)
     if (!local) throw new HttpError(500, 'local user missing — database not initialized')
     return local
   }
   const token = getCookie(c, SESSION_COOKIE)
-  const user = token ? db.userForSession(token) : null
+  const user = token ? await db.userForSession(token) : null
   if (!user) throw new HttpError(401, 'sign in required')
   return user
 }
 
 /** The current user if authenticated, else null (never throws). */
-export function currentUser(c: Context): db.User | null {
+export async function currentUser(c: Context): Promise<db.User | null> {
   try {
-    return requireUser(c)
+    return await requireUser(c)
   } catch {
     return null
   }
 }
 
-export function startSession(c: Context, userId: number): void {
+export async function startSession(c: Context, userId: number): Promise<void> {
   const token = randomToken(32)
-  db.createSession(userId, token, SESSION_TTL_DAYS)
+  await db.createSession(userId, token, SESSION_TTL_DAYS)
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'Lax',
@@ -46,8 +46,8 @@ export function startSession(c: Context, userId: number): void {
   })
 }
 
-export function endSession(c: Context): void {
+export async function endSession(c: Context): Promise<void> {
   const token = getCookie(c, SESSION_COOKIE)
-  if (token) db.deleteSession(token)
+  if (token) await db.deleteSession(token)
   deleteCookie(c, SESSION_COOKIE, { path: '/' })
 }

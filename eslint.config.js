@@ -14,7 +14,14 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['eslint.config.js', 'playwright.config.ts', 'scripts/*.mjs', 'e2e/*.ts'],
+          allowDefaultProject: [
+            'eslint.config.js',
+            'playwright.config.ts',
+            'scripts/*.mjs',
+            'e2e/*.ts',
+            'e2e/*.mjs',
+            'server/drizzle.config.ts',
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -40,9 +47,9 @@ export default tseslint.config(
       globals: { process: 'readonly', console: 'readonly', fetch: 'readonly', setTimeout: 'readonly' },
     },
   },
-  // test plumbing: lint without type information (outside the workspaces' tsconfigs)
+  // config/test plumbing: lint without type information (outside the workspaces' tsconfigs)
   {
-    files: ['playwright.config.ts', 'e2e/**/*.ts'],
+    files: ['playwright.config.ts', 'e2e/**/*.ts', 'server/drizzle.config.ts'],
     ...tseslint.configs.disableTypeChecked,
   },
   prettier,

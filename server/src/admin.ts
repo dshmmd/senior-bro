@@ -20,8 +20,8 @@ export function isAdminEmail(email: string | null): boolean {
   return email !== null && adminEmails().includes(email.toLowerCase())
 }
 
-export function requireAdmin(c: Context): User {
-  const user = requireUser(c)
+export async function requireAdmin(c: Context): Promise<User> {
+  const user = await requireUser(c)
   if (user.role !== 'admin') throw new HttpError(403, 'admin access required')
   return user
 }

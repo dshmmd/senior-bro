@@ -11,7 +11,7 @@ import { api } from './routes.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 4747)
 
-initDb()
+await initDb()
 
 const app = new Hono()
 

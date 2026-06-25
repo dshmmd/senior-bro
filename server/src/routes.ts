@@ -35,9 +35,9 @@ interface ResolvedCall {
   priceOut: number
 }
 
-function resolveCall(user: db.User): ResolvedCall {
+async function resolveCall(user: db.User): Promise<ResolvedCall> {
   if (user.model_id !== null) {
-    const resolved = db.modelConfig(user.model_id)
+    const resolved = await db.modelConfig(user.model_id)
     if (!resolved?.option.enabled)
       throw new HttpError(409, 'your selected model is no longer available — pick another')
     return {
@@ -47,21 +47,21 @@ function resolveCall(user: db.User): ResolvedCall {
       priceOut: resolved.option.price_out,
     }
   }
-  const cfg = db.getUserConfig(user.id)
+  const cfg = await db.getUserConfig(user.id)
   if (!cfg) throw new HttpError(409, 'Not configured: set provider and API key first')
   return { cfg, modelId: null, priceIn: 0, priceOut: 0 }
 }
 
 /** Resolve the requesting user + their model call in one step (401/409 otherwise). */
-function requireCall(c: Context): { user: db.User; call: ResolvedCall } {
-  const user = requireUser(c)
-  return { user, call: resolveCall(user) }
+async function requireCall(c: Context): Promise<{ user: db.User; call: ResolvedCall }> {
+  const user = await requireUser(c)
+  return { user, call: await resolveCall(user) }
 }
 
 /** Block a host-key call when the user is over their token quota (BYOK is never blocked). */
-function enforceQuota(user: db.User, call: ResolvedCall): void {
+async function enforceQuota(user: db.User, call: ResolvedCall): Promise<void> {
   if (call.modelId === null || user.token_quota === null) return
-  if (db.tokensUsed(user.id) >= user.token_quota)
+  if ((await db.tokensUsed(user.id)) >= user.token_quota)
     throw new HttpError(402, 'token quota reached — contact the admin to raise your limit')
 }
 
@@ -74,11 +74,11 @@ async function runModel(
   maxTokens = 4096,
   onDelta?: OnDelta,
 ): Promise<string> {
-  enforceQuota(user, call)
+  await enforceQuota(user, call)
   const { text, usage } = await chat(call.cfg, system, messages, maxTokens, onDelta)
   const costUsd =
     (usage.inputTokens / 1_000_000) * call.priceIn + (usage.outputTokens / 1_000_000) * call.priceOut
-  db.recordUsage({
+  await db.recordUsage({
     userId: user.id,
     modelId: call.modelId,
     provider: call.cfg.provider,
@@ -91,17 +91,17 @@ async function runModel(
 }
 
 /** Throw 404 unless `profileId` belongs to `userId` (cross-user isolation guard). */
-function ownProfile(userId: number, profileId: number): db.Profile {
-  const profile = db.getProfile(profileId)
+async function ownProfile(userId: number, profileId: number): Promise<db.Profile> {
+  const profile = await db.getProfile(profileId)
   if (profile?.user_id !== userId) throw new HttpError(404, 'profile not found')
   return profile
 }
 
 /** Throw 404 unless `interviewId` is owned (via its profile) by `userId`. */
-function ownInterview(userId: number, interviewId: number): db.InterviewRow {
-  const interview = db.getInterview(interviewId)
+async function ownInterview(userId: number, interviewId: number): Promise<db.InterviewRow> {
+  const interview = await db.getInterview(interviewId)
   if (!interview) throw new HttpError(404, 'interview not found')
-  ownProfile(userId, interview.profile_id)
+  await ownProfile(userId, interview.profile_id)
   return interview
 }
 
@@ -199,9 +199,9 @@ const quotaSchema = z.object({ token_quota: z.number().int().min(0).nullable() }
 
 // ── config ──────────────────────────────────────────────────────────
 
-api.get('/health', (c) => {
-  const user = currentUser(c)
-  const configured = user ? db.getUserConfig(user.id) !== null : false
+api.get('/health', async (c) => {
+  const user = await currentUser(c)
+  const configured = user ? (await db.getUserConfig(user.id)) !== null : false
   return c.json({
     ok: true,
     mode: MODE,
@@ -211,14 +211,14 @@ api.get('/health', (c) => {
   })
 })
 
-api.get('/config', (c) => {
-  const user = requireUser(c)
-  const cfg = db.getUserConfig(user.id)
+api.get('/config', async (c) => {
+  const user = await requireUser(c)
+  const cfg = await db.getUserConfig(user.id)
   return c.json(cfg ? { provider: cfg.provider, model: cfg.model, hasKey: true } : { hasKey: false })
 })
 
 api.post('/config', async (c) => {
-  const user = requireUser(c)
+  const user = await requireUser(c)
   const body = await parseBody(c, configSchema)
   const cfg: AppConfig = {
     provider: body.provider,
@@ -230,14 +230,14 @@ api.post('/config', async (c) => {
     const what = isCliProvider(cfg.provider) ? 'CLI check' : 'API key validation'
     throw new HttpError(400, `${what} failed: ${check.error ?? 'unknown'}`)
   }
-  db.setUserConfig(user.id, cfg)
+  await db.setUserConfig(user.id, cfg)
   return c.json({ ok: true, provider: cfg.provider, model: cfg.model })
 })
 
 // ── auth (hosted mode: email magic-link, no passwords) ───────────────
 
-api.get('/auth/me', (c) => {
-  const user = currentUser(c)
+api.get('/auth/me', async (c) => {
+  const user = await currentUser(c)
   return c.json(user ? { email: user.email, role: user.role } : null)
 })
 
@@ -245,7 +245,7 @@ api.post('/auth/request', async (c) => {
   if (!isHosted) throw new HttpError(400, 'accounts are only used in hosted mode')
   const { email } = await parseBody(c, authRequestSchema)
   const token = randomToken(32)
-  db.createMagicLink(email, token, 20)
+  await db.createMagicLink(email, token, 20)
   const origin = c.req.header('origin') ?? new URL(c.req.url).origin
   const link = `${origin}/?magic=${token}`
   await sendMagicLink(email, link)
@@ -256,61 +256,61 @@ api.post('/auth/request', async (c) => {
 api.post('/auth/verify', async (c) => {
   if (!isHosted) throw new HttpError(400, 'accounts are only used in hosted mode')
   const { token } = await parseBody(c, authVerifySchema)
-  const email = db.consumeMagicLink(token)
+  const email = await db.consumeMagicLink(token)
   if (!email) throw new HttpError(400, 'this sign-in link is invalid or expired — request a new one')
-  const user = db.upsertUserByEmail(email)
+  const user = await db.upsertUserByEmail(email)
   // Promote configured admin emails (SENIORBRO_ADMIN_EMAILS) on sign-in.
   let role = user.role
   if (isAdminEmail(email) && role !== 'admin') {
-    db.setUserRole(user.id, 'admin')
+    await db.setUserRole(user.id, 'admin')
     role = 'admin'
   }
-  startSession(c, user.id)
+  await startSession(c, user.id)
   return c.json({ ok: true, email: user.email, role })
 })
 
-api.post('/auth/logout', (c) => {
-  endSession(c)
+api.post('/auth/logout', async (c) => {
+  await endSession(c)
   return c.json({ ok: true })
 })
 
 // ── model catalog & usage (user-facing) ──────────────────────────────
 
 // Curated models the user may pick from (admin-enabled only; never exposes keys).
-api.get('/models', (c) => {
-  const user = requireUser(c)
-  return c.json({ models: db.listModels(true), selected_model_id: user.model_id })
+api.get('/models', async (c) => {
+  const user = await requireUser(c)
+  return c.json({ models: await db.listModels(true), selected_model_id: user.model_id })
 })
 
 // Pick an admin-curated model (host key + metered). Hosted mode only.
 api.post('/models/select', async (c) => {
-  const user = requireUser(c)
+  const user = await requireUser(c)
   const { model_id } = await parseBody(c, modelSelectSchema)
-  const option = db.getModel(model_id)
+  const option = await db.getModel(model_id)
   if (!option?.enabled) throw new HttpError(404, 'model not available')
-  db.setUserModelChoice(user.id, model_id)
+  await db.setUserModelChoice(user.id, model_id)
   return c.json({ ok: true })
 })
 
 // The signed-in user's own usage + quota.
-api.get('/usage', (c) => {
-  const user = requireUser(c)
+api.get('/usage', async (c) => {
+  const user = await requireUser(c)
   return c.json({
-    usage: db.usageSummary(user.id),
+    usage: await db.usageSummary(user.id),
     token_quota: user.token_quota,
-    tokens_used: db.tokensUsed(user.id),
+    tokens_used: await db.tokensUsed(user.id),
   })
 })
 
 // ── admin (model/key management, users, usage console) ───────────────
 
-api.get('/admin/models', (c) => {
-  requireAdmin(c)
-  return c.json(db.listModels(false))
+api.get('/admin/models', async (c) => {
+  await requireAdmin(c)
+  return c.json(await db.listModels(false))
 })
 
 api.post('/admin/models', async (c) => {
-  requireAdmin(c)
+  await requireAdmin(c)
   const body = await parseBody(c, modelCreateSchema)
   // Validate the key works before saving (mock needs none).
   if (body.provider !== 'mock') {
@@ -321,7 +321,7 @@ api.post('/admin/models', async (c) => {
     })
     if (!check.ok) throw new HttpError(400, `key validation failed: ${check.error ?? 'unknown'}`)
   }
-  const created = db.createModel({
+  const created = await db.createModel({
     label: body.label,
     provider: body.provider,
     model: body.model,
@@ -335,10 +335,10 @@ api.post('/admin/models', async (c) => {
 })
 
 api.patch('/admin/models/:id', async (c) => {
-  requireAdmin(c)
+  await requireAdmin(c)
   const id = Number(c.req.param('id'))
   const body = await parseBody(c, modelUpdateSchema)
-  const updated = db.updateModel(id, {
+  const updated = await db.updateModel(id, {
     label: body.label,
     enabled: body.enabled,
     is_default: body.is_default,
@@ -350,30 +350,32 @@ api.patch('/admin/models/:id', async (c) => {
   return c.json(updated)
 })
 
-api.delete('/admin/models/:id', (c) => {
-  requireAdmin(c)
-  db.deleteModel(Number(c.req.param('id')))
+api.delete('/admin/models/:id', async (c) => {
+  await requireAdmin(c)
+  await db.deleteModel(Number(c.req.param('id')))
   return c.json({ ok: true })
 })
 
-api.get('/admin/users', (c) => {
-  requireAdmin(c)
-  return c.json(
-    db.listUsers().map((u) => ({
+api.get('/admin/users', async (c) => {
+  await requireAdmin(c)
+  const users = await db.listUsers()
+  const rows = await Promise.all(
+    users.map(async (u) => ({
       id: u.id,
       email: u.email,
       role: u.role,
       model_id: u.model_id,
       token_quota: u.token_quota,
-      ...db.usageSummary(u.id),
+      ...(await db.usageSummary(u.id)),
     })),
   )
+  return c.json(rows)
 })
 
 api.post('/admin/users/:id/quota', async (c) => {
-  requireAdmin(c)
+  await requireAdmin(c)
   const { token_quota } = await parseBody(c, quotaSchema)
-  db.setUserQuota(Number(c.req.param('id')), token_quota)
+  await db.setUserQuota(Number(c.req.param('id')), token_quota)
   return c.json({ ok: true })
 })
 
@@ -386,9 +388,9 @@ api.get('/skills', (c) =>
 // ── profile ─────────────────────────────────────────────────────────
 
 api.post('/profile', async (c) => {
-  const user = requireUser(c)
+  const user = await requireUser(c)
   const body = await parseBody(c, profileSchema)
-  const profile = db.createProfile(user.id, {
+  const profile = await db.createProfile(user.id, {
     role: body.role,
     company: body.company ?? null,
     skill_pack: body.skill_pack ?? null,
@@ -399,75 +401,76 @@ api.post('/profile', async (c) => {
   return c.json(profile)
 })
 
-api.get('/profile', (c) => {
-  const user = requireUser(c)
-  const profile = db.latestProfile(user.id)
+api.get('/profile', async (c) => {
+  const user = await requireUser(c)
+  const profile = await db.latestProfile(user.id)
   if (!profile) return c.json(null)
-  return c.json({ ...profile, weaknesses: db.listWeaknesses(profile.id) })
+  return c.json({ ...profile, weaknesses: await db.listWeaknesses(profile.id) })
 })
 
 // ── calibration ─────────────────────────────────────────────────────
 
 api.post('/calibration/start', async (c) => {
-  const { user, call } = requireCall(c)
+  const { user, call } = await requireCall(c)
   const { profile_id } = await parseBody(c, calibrationStartSchema)
-  const profile = ownProfile(user.id, profile_id)
+  const profile = await ownProfile(user.id, profile_id)
   const raw = await runModel(user, call, 'You generate interview calibration questions as JSON.', [
     { role: 'user', content: calibrationGeneratePrompt(profile) },
   ])
   const questions = extractJson<string[]>(raw)
-  const id = db.createCalibration(profile.id, questions)
+  const id = await db.createCalibration(profile.id, questions)
   return c.json({ calibration_id: id, questions })
 })
 
 api.post('/calibration/submit', async (c) => {
-  const { user, call } = requireCall(c)
+  const { user, call } = await requireCall(c)
   const { calibration_id, answers } = await parseBody(c, calibrationSubmitSchema)
-  const calibration = db.getCalibration(calibration_id)
+  const calibration = await db.getCalibration(calibration_id)
   if (!calibration) throw new HttpError(404, 'calibration not found')
-  const profile = ownProfile(user.id, calibration.profile_id)
+  const profile = await ownProfile(user.id, calibration.profile_id)
   const raw = await runModel(user, call, 'You grade interview calibration quizzes as JSON.', [
     { role: 'user', content: calibrationGradePrompt(profile, calibration.questions as string[], answers) },
   ])
   const result = extractJson<{ level: string; summary: string }>(raw)
-  db.saveCalibrationResult(calibration_id, result)
-  db.setProfileLevel(profile.id, result.level, result.summary)
+  await db.saveCalibrationResult(calibration_id, result)
+  await db.setProfileLevel(profile.id, result.level, result.summary)
   return c.json(result)
 })
 
 // ── interviews ──────────────────────────────────────────────────────
 
-function systemFor(interview: db.InterviewRow, weaknessId?: number): string {
-  const profile = db.getProfile(interview.profile_id)
+async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promise<string> {
+  const profile = await db.getProfile(interview.profile_id)
   if (!profile) throw new HttpError(404, 'profile not found')
   if (interview.kind === 'coaching') {
-    const weaknesses = db.listWeaknesses(profile.id)
-    const target = weaknessId ? db.getWeakness(weaknessId) : weaknesses.find((w) => w.status !== 'resolved')
+    const weaknesses = await db.listWeaknesses(profile.id)
+    const target = weaknessId
+      ? await db.getWeakness(weaknessId)
+      : weaknesses.find((w) => w.status !== 'resolved')
     if (!target) throw new HttpError(400, 'no open weakness to coach on')
     return coachingSystemPrompt(profile, target, interview.mode)
   }
   const pack = profile.skill_pack ? getSkillPack(profile.skill_pack) : null
-  return interviewSystemPrompt(profile, pack, db.listWeaknesses(profile.id), interview.mode)
+  return interviewSystemPrompt(profile, pack, await db.listWeaknesses(profile.id), interview.mode)
 }
 
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '').trim()
 
 api.post('/interviews', async (c) => {
-  const { user, call } = requireCall(c)
+  const { user, call } = await requireCall(c)
   const body = await parseBody(c, interviewSchema)
-  const profile = ownProfile(user.id, body.profile_id)
+  const profile = await ownProfile(user.id, body.profile_id)
 
-  const interview = db.createInterview(profile.id, body.mode, body.kind)
-  const system = systemFor(interview, body.weakness_id)
+  const interview = await db.createInterview(profile.id, body.mode, body.kind)
+  const system = await systemFor(interview, body.weakness_id)
   const messages: ChatMessage[] = [{ role: 'user', content: FIRST_MESSAGE_TRIGGER }]
 
-  const persist = (opener: string) => {
+  const persist = (opener: string) =>
     db.saveTranscript(interview.id, [{ role: 'assistant', content: opener }])
-  }
 
   if (!wantsStream(c)) {
     const opener = await runModel(user, call, system, messages)
-    persist(opener)
+    await persist(opener)
     return c.json({ interview_id: interview.id, message: opener })
   }
 
@@ -476,7 +479,7 @@ api.post('/interviews', async (c) => {
       const opener = await runModel(user, call, system, messages, 4096, (t) => {
         void stream.writeSSE({ event: 'delta', data: JSON.stringify(t) })
       })
-      persist(opener)
+      await persist(opener)
       await stream.writeSSE({
         event: 'done',
         data: JSON.stringify({ interview_id: interview.id, message: opener }),
@@ -491,30 +494,30 @@ api.post('/interviews', async (c) => {
 })
 
 api.post('/interviews/:id/messages', async (c) => {
-  const { user, call } = requireCall(c)
+  const { user, call } = await requireCall(c)
   const id = Number(c.req.param('id'))
-  const interview = ownInterview(user.id, id)
+  const interview = await ownInterview(user.id, id)
   if (interview.status !== 'active') throw new HttpError(409, 'interview already finished')
 
   const { content } = await parseBody(c, messageSchema)
 
   const transcript = [...interview.transcript, { role: 'user', content } as const]
-  const system = systemFor(interview)
+  const system = await systemFor(interview)
   // The model only ever saw FIRST_MESSAGE_TRIGGER as turn one; replay it so
   // roles alternate user/assistant from the start.
   const messages: ChatMessage[] = [{ role: 'user', content: FIRST_MESSAGE_TRIGGER }, ...transcript]
 
-  const persist = (reply: string): { message: string; done: boolean } => {
+  const persist = async (reply: string): Promise<{ message: string; done: boolean }> => {
     const done = reply.includes('[INTERVIEW_COMPLETE]')
     const cleaned = stripToken(reply)
     transcript.push({ role: 'assistant', content: cleaned })
-    db.saveTranscript(id, transcript)
+    await db.saveTranscript(id, transcript)
     return { message: cleaned, done }
   }
 
   if (!wantsStream(c)) {
     const reply = await runModel(user, call, system, messages)
-    return c.json(persist(reply))
+    return c.json(await persist(reply))
   }
 
   return streamSSE(c, async (stream) => {
@@ -522,7 +525,7 @@ api.post('/interviews/:id/messages', async (c) => {
       const reply = await runModel(user, call, system, messages, 4096, (t) => {
         void stream.writeSSE({ event: 'delta', data: JSON.stringify(t) })
       })
-      await stream.writeSSE({ event: 'done', data: JSON.stringify(persist(reply)) })
+      await stream.writeSSE({ event: 'done', data: JSON.stringify(await persist(reply)) })
     } catch (err) {
       await stream.writeSSE({
         event: 'error',
@@ -533,14 +536,14 @@ api.post('/interviews/:id/messages', async (c) => {
 })
 
 api.post('/interviews/:id/finish', async (c) => {
-  const { user, call } = requireCall(c)
+  const { user, call } = await requireCall(c)
   const id = Number(c.req.param('id'))
-  const interview = ownInterview(user.id, id)
+  const interview = await ownInterview(user.id, id)
   if (interview.status === 'finished') return c.json(interview.report)
   if (interview.transcript.length < 2)
     throw new HttpError(400, 'not enough conversation to evaluate — answer at least one question')
 
-  const profile = ownProfile(user.id, interview.profile_id)
+  const profile = await ownProfile(user.id, interview.profile_id)
 
   const raw = await runModel(
     user,
@@ -550,15 +553,16 @@ api.post('/interviews/:id/finish', async (c) => {
     8192,
   )
   const report = extractJson<db.InterviewReport>(raw)
-  db.finishInterview(id, report)
-  for (const w of report.weaknesses) db.addWeakness(profile.id, w, id)
+  await db.finishInterview(id, report)
+  for (const w of report.weaknesses) await db.addWeakness(profile.id, w, id)
   return c.json(report)
 })
 
-api.get('/interviews', (c) => {
-  const user = requireUser(c)
+api.get('/interviews', async (c) => {
+  const user = await requireUser(c)
+  const interviews = await db.listInterviewsForUser(user.id)
   return c.json(
-    db.listInterviewsForUser(user.id).map((i) => ({
+    interviews.map((i) => ({
       id: i.id,
       mode: i.mode,
       kind: i.kind,
@@ -571,37 +575,37 @@ api.get('/interviews', (c) => {
   )
 })
 
-api.get('/interviews/:id', (c) => {
-  const user = requireUser(c)
-  const interview = ownInterview(user.id, Number(c.req.param('id')))
+api.get('/interviews/:id', async (c) => {
+  const user = await requireUser(c)
+  const interview = await ownInterview(user.id, Number(c.req.param('id')))
   return c.json(interview)
 })
 
 // ── weaknesses ──────────────────────────────────────────────────────
 
-api.get('/weaknesses', (c) => {
-  const user = requireUser(c)
-  const profile = db.latestProfile(user.id)
-  return c.json(profile ? db.listWeaknesses(profile.id) : [])
+api.get('/weaknesses', async (c) => {
+  const user = await requireUser(c)
+  const profile = await db.latestProfile(user.id)
+  return c.json(profile ? await db.listWeaknesses(profile.id) : [])
 })
 
 api.post('/weaknesses/:id/status', async (c) => {
-  const user = requireUser(c)
+  const user = await requireUser(c)
   const { status } = await parseBody(c, weaknessStatusSchema)
-  const weakness = db.getWeakness(Number(c.req.param('id')))
+  const weakness = await db.getWeakness(Number(c.req.param('id')))
   if (!weakness) throw new HttpError(404, 'weakness not found')
-  ownProfile(user.id, weakness.profile_id)
-  db.setWeaknessStatus(weakness.id, status)
+  await ownProfile(user.id, weakness.profile_id)
+  await db.setWeaknessStatus(weakness.id, status)
   return c.json({ ok: true })
 })
 
 // ── progress (gamification) ─────────────────────────────────────────
 
-api.get('/progress', (c) => {
-  const user = requireUser(c)
-  const profile = db.latestProfile(user.id)
+api.get('/progress', async (c) => {
+  const user = await requireUser(c)
+  const profile = await db.latestProfile(user.id)
   if (!profile) return c.json(null)
-  const interviews = db.listInterviewsForUser(user.id).filter((i) => i.profile_id === profile.id)
-  const weaknesses = db.listWeaknesses(profile.id)
+  const interviews = (await db.listInterviewsForUser(user.id)).filter((i) => i.profile_id === profile.id)
+  const weaknesses = await db.listWeaknesses(profile.id)
   return c.json(computeProgress(profile, interviews, weaknesses))
 })

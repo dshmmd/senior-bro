@@ -1,0 +1,23 @@
+# Local Postgres for Senior Bro (D9 / Phase 11). Temporary dev datastore on the
+# laptop; production will point DATABASE_URL at a managed/server-grade Postgres.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: senior-bro-db
+    environment:
+      POSTGRES_USER: senior
+      POSTGRES_PASSWORD: senior
+      POSTGRES_DB: senior_bro
+    ports:
+      # host 5433 → container 5432 (avoid clashing with a native local Postgres)
+      - '5433:5432'
+    volumes:
+      - sb_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U senior -d senior_bro']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  sb_pgdata:

@@ -9,6 +9,22 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: senior
+          POSTGRES_PASSWORD: senior
+          POSTGRES_DB: senior_bro
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U senior -d senior_bro"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://senior:senior@localhost:5433/senior_bro
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
