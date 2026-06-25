@@ -28,3 +28,7 @@ One entry per completed milestone. Read this before working on the repo.
   Phase 9 admin (model/key catalog, user quotas, usage console) + Phase 8 metering
   (`chat()` returns token usage; `usage_events`; per-call cost; 402 over quota). Admin
   curates models, users pick one (host key) or BYOK. R13 functional end-to-end.
+- [2026-06-25 — Owner re-planning D9–D15](2026-06-25-owner-replanning-d9-d15.md) —
+  docs-only. New scope: Postgres/Docker store (supersedes node:sqlite + zero-deps rule),
+  dynamic company packs, plans + invite codes, admin-versioned prompts + guardrails,
+  resumable sessions, accent voice. Phases 11–16; recommended next = **Phase 11 (Postgres)**.

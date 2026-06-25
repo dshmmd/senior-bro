@@ -1,16 +1,25 @@
 # Senior Bro — AI Interview Coach
 
-Local-first AI interview platform. The user tells us the job they want, we
-calibrate their level, run a realistic voice-or-text interview, detect
-weaknesses, and coach them until they're ready. Powered by the user's own API
-key **or their existing Claude/ChatGPT subscription** (via the local CLI).
+Hosted-first AI interview platform (still runs locally for dev). The user tells us
+the job + company they want, we research that company, calibrate their level with a
+free short interview, then run a realistic voice-or-text interview tuned to them,
+detect weaknesses, and coach them until they're ready. Powered by **our host models
+(paid)**, the user's **own API key (free)**, or their **Claude/ChatGPT subscription
+via the local CLI (free, local only)** — see plans in ROADMAP D11.
+
+> **2026-06-25 owner re-planning in flight (D9–D15, Phases 11–16).** Several rules
+> below are being superseded — durable Postgres store on Docker (D9, supersedes the
+> zero-deps/`node:sqlite` rule), dynamic company-pack generation (D10, supersedes
+> "one company = one file"), admin-managed versioned prompts (D12, prompts leave
+> `prompts.ts`). Read ROADMAP Phases 11–16 before starting new work.
 
 ## ▶ START HERE — when the owner says "continue"
 
 Do this, in order, before writing any code. It rebuilds full context in ~1 min:
 
 1. Read **`ROADMAP.md`** top-to-bottom — it has the vision, the decisions
-   (D1–D8), open questions, the phase checklist, and the owner-directed build order.
+   (D1–D15), open questions, the phase checklist (Phases 0–16), and the owner-directed
+   build order. Phases 11–16 are the current owner-directed scope.
 2. Read **`memory/INDEX.md`** and the newest `memory/*.md` entry — what's done, why,
    and the gotchas.
 3. Run **`make check`** to confirm the tree is green before changing anything.
@@ -31,12 +40,19 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 2. When a plan item below is completed, mark it `[x]` here AND append a short
    entry to `memory/` (one file per milestone, linked from `memory/INDEX.md`).
 3. Verification gate before any commit: `make check` (lint + typecheck + build + smoke).
-   Run `make e2e` too when a UI flow changed.
-4. One language everywhere: TypeScript. No new runtime deps without a strong reason —
-   we deliberately use `node:sqlite` and raw `fetch` to keep the install surface tiny.
-5. User-facing strings live in the React components; prompts live in `server/src/prompts.ts`.
-6. Company interview knowledge lives in `skills/*.md` (frontmatter + markdown).
-   Adding a company = adding one file. Never hardcode company specifics in code.
+   Run `make e2e` too when a UI flow changed. (From Phase 11, `make check` needs Postgres up.)
+4. One language everywhere: TypeScript. ~~No new runtime deps; we use `node:sqlite`~~
+   **SUPERSEDED by D9 (2026-06-25):** the server moves to **PostgreSQL in Docker** with a
+   typed migration layer (Drizzle recommended). Deps that buy real robustness are now fine;
+   still avoid gratuitous ones. The web app keeps its tiny-bundle discipline (D1).
+5. User-facing strings live in the React components. ~~Prompts live in `prompts.ts`~~
+   **Being superseded by D12:** prompts move into the DB (admin-editable, versioned); code
+   ships the seed/default version. Until Phase 14 lands, `server/src/prompts.ts` is still
+   the source of truth.
+6. ~~Company knowledge = one `skills/*.md` file per company~~ **SUPERSEDED by D10:** company
+   packs are **generated on demand** (web search → draft → stored in DB → admin review) and
+   cached/reused. The 4 `skills/*.md` are the initial seed. Never hardcode company specifics
+   in code.
 
 ## Requirements (from the product owner)
 
@@ -60,11 +76,28 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   (no redeploy). Remaining (ROADMAP Ph 8/9): billing/checkout, audit log, suspend,
   quota periods, skill-pack admin, agent console.
 
+### Re-planning 2026-06-25 — next requirements (ROADMAP Phases 11–16, D9–D15)
+- [ ] R14: **Dynamic company packs** — research an unknown company on demand (web search →
+  domain + role interview process), store + cache + reuse; admin review. (D10 · Phase 15)
+- [ ] R15: **Returning users + resumable sessions** — recognized every visit; leave an
+  interview and resume it later exactly where it stopped. (D14 · Phase 12)
+- [ ] R16: **Durable per-user datastore for the long term** — PostgreSQL in Docker, typed
+  migrations, strict per-user partitioning. (D9 · Phase 11)
+- [ ] R17: **Admin-managed, versioned system prompts** — edit/improve in the admin UI with
+  version history + rollback; guardrail frame stays fixed. (D12 · Phase 14)
+- [ ] R18: **Plans & gating** — free short level-check, then choose a plan: host-models (paid,
+  mocked payment) / BYO key (free) / local CLI (free); **admin-minted invite codes** carry
+  credit. (D11 · Phase 13)
+- [ ] R19: **Prompt guardrails** — users can't steer the model off the interview task
+  (prompt-injection / jailbreak resistance). (D13 · Phase 14)
+- [ ] R20: **Accent-aware voice** — send audio to the model where supported, otherwise an
+  editable transcript the user confirms before sending (no more auto-sent raw STT). (D15 · Phase 16)
+
 ## Architecture
 
 ```
 senior-bro (npm workspace monorepo)
-├── server/   Hono + node:sqlite. Serves API + built web app. Port 4747.
+├── server/   Hono + node:sqlite (→ PostgreSQL/Docker per D9, Phase 11). API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
 │   ├── src/db.ts         sqlite schema & queries (~/.senior-bro/data.db); users/sessions/

@@ -13,9 +13,19 @@ subscription), so the app proactively personalizes — builds their profile, sha
 their resume, finds real openings, runs interviews tuned to their weaknesses and
 targets, teaches while testing, and gamifies progress until weaknesses become medals.
 
-**Business model:** closed-source SaaS. Two ways in: (a) bring your own API key
-(free tier, our costs ≈ 0), (b) buy a subscription that uses host tokens —
-metered usage, fiat + crypto payments.
+**Business model:** closed-source SaaS, **hosted-first**. A short level-check
+interview is **free for everyone** (no plan, no payment — just enough to grade the
+user). After that the user must pick a **plan**:
+
+- **Plan A — Host models (paid):** we run the calls on our API keys; usage is metered
+  and billed (payment **mocked for now**). This is the only paid plan.
+- **Plan B — Bring your own API key (free):** user pastes their own provider key; their
+  cost, our cost ≈ 0.
+- **Plan C — Local subscription (free):** user's logged-in `claude`/`codex` CLI on their
+  own machine (Plan C is local-only by definition — see D8).
+
+**Invite codes** (admin-issued) carry prepaid credit and unlock paid usage without a
+card — for testers, partners, and early users. See D11.
 
 ## Decisions made (owner gave authority — revisit only if owner objects)
 
@@ -29,6 +39,13 @@ metered usage, fiat + crypto payments.
 | D6 | User-level skills (curated packs) are read-only to users; user personalization lives in their user-model doc, separate namespace | Owner requirement; clean trust boundary |
 | D7 | Gamification metaphor: **constellation skill map** — each field is a star cluster, interviews light up stars, fully-lit cluster crystallizes into a medal | Fits the dark UI, maps 1:1 to weakness data we already collect |
 | D8 | **Subscription auth via local CLI** (2026-06-24): besides BYO-API-key, support `claude-cli`/`codex-cli` providers that shell out to the user's logged-in `claude`/`codex` CLI in print mode (`claude -p`, `codex exec`). Bills the user's Claude Pro/Max or ChatGPT/Codex subscription — **no API credits**. Local mode ONLY (CLI runs on the user's own machine). The hosted tier must NOT proxy a customer's subscription remotely (ToS + can't share logins) — hosted uses API keys / host tokens. `server/src/providers.ts` strips `ANTHROPIC_*`/`OPENAI_*` env overrides so the CLI uses subscription auth. | The owner (and most users) have a $20 subscription but no API credits — this is the difference between being able to use the product at all or not |
+| D9 | **Durable datastore = PostgreSQL in Docker** (2026-06-25): replace `node:sqlite` with Postgres 16 run via `docker compose` (owner authorized Docker on their laptop). One real DB for both local-dev and hosted — no dual-DB burden. Data access through a **typed query/migration layer** (Drizzle ORM recommended, revisitable) with versioned migrations. This **supersedes the zero-runtime-deps rule** for the server: robustness/long-term per-user data now outranks install-surface minimalism. | "Make a good reliable design to work in long term" + "robust enterprise system" — SQLite single-file won't carry concurrent multi-user hosted load, migrations, and the new prompt/company/credit tables cleanly |
+| D10 | **Dynamic company skill packs** (2026-06-25): drop the "one company = one hand-written file" model. When a user names a company we don't have, the model **web-searches the company + its domain + the role's interview process**, drafts a pack, and stores it in the DB (cached + reused across users). The 4 static `skills/*.md` become the initial seed. Admin can review/edit/publish generated packs. | "Defining a few companies is useless" — every real user targets a different company; generation + cache scales to any company without a code change |
+| D11 | **Plans, gating & invite codes** (2026-06-25): free short level-check for all; then a plan is required. Plan A (host models) is metered + **mocked payment**; Plans B (BYO key) and C (local CLI) are free. **Invite codes** are admin-minted, carry a credit balance, and unlock paid usage without a card. Entitlement is checked server-side before any paid (host-key) call — extends the Phase 8 metering/quota we already have. | Owner's plan structure; lets us launch + onboard testers before real billing exists |
+| D12 | **Admin-managed, versioned system prompts** (2026-06-25): prompts move from `server/src/prompts.ts` constants into the DB, **editable in the admin UI, versioned with history + rollback**, with an active version per prompt key. Code ships the seed/default version. | Owner wants to manage & improve prompts live; versioning = safe iteration + auditability (best practice for prompt ops) |
+| D13 | **Prompt guardrails (anti-derailment)** (2026-06-25): every interview prompt wraps a **fixed, non-editable guardrail frame** that pins the model to the interview task and treats all candidate input as untrusted *content, never instructions*. Admin-edited prompt bodies sit **inside** the frame; users can never escape it (no "ignore previous instructions", topic changes, or role swaps). | "Users must not change the context far away from interview" — prompt-injection / jailbreak resistance is a correctness + brand requirement |
+| D14 | **Session continuity & returning users** (2026-06-25): long-lived auth so a user is recognized on every visit; an interrupted interview is **resumable exactly where it left off** (server is the source of truth — transcripts are already persisted; add active-interview detection + a "resume" entry point). | Owner: "leave a session and come back later and continue that" — durable, resumable sessions are table-stakes for a real product |
+| D15 | **Voice = accent-aware** (2026-06-25): stop auto-sending raw speech-to-text. Two paths: (a) **send the audio to the model** where the provider supports audio input (accent help, no lossy transcription); (b) universal fallback = STT with an **editable transcript** the user confirms before sending. Prefer (a) when available, always offer (b). | Owner: raw STT can't be edited and loses accent signal — let the model hear the voice or let the user fix the text first |
 
 ## Open questions for the product owner
 
@@ -40,7 +57,18 @@ metered usage, fiat + crypto payments.
   deploy no longer exposes a shared datastore. Owner still wants the R13 admin/metering
   bundle (Phases 8/9) before actually charging users.
 - Q2: Which countries first for job-opportunity search? Affects which job boards/APIs.
-- Q3: Subscription pricing instinct (e.g. $9/mo with N interview-hours) — needed before Phase 8 ships.
+- Q3: Plan A pricing — what's the unit? (per interview-hour, per 1M tokens with a margin,
+  or a flat monthly with N interviews?) Needed before real (un-mocked) billing. Credit on
+  invite codes is expressed in the same unit.
+- Q4: Web-search source for company research (D10) — built-in model web search (Claude/OpenAI),
+  or a search API (Brave/Tavily/SerpAPI)? Affects cost + reliability + the generation prompt.
+- Q5: Confirm the data layer for D9 — **Drizzle ORM + Postgres** (recommended) vs. raw `pg` +
+  SQL migrations vs. Prisma. Locks in the migration tool before the rewrite starts.
+- Q6: Audio-capable model for D15 — which provider/model do we target for native audio input,
+  and is the editable-transcript fallback acceptable as the default until that's wired?
+- Q7: Does local mode survive the Postgres move, or is local just "hosted pointed at a local
+  Postgres"? (Recommended: keep a single Postgres for both; local single-user becomes a seeded
+  account. Confirm we can retire the `node:sqlite` path.)
 
 ## Build order (owner-directed, may differ from phase numbers)
 
@@ -53,8 +81,23 @@ metered usage, fiat + crypto payments.
   Phases 3 → 8 → 9; build the thin vertical slice across them first (see Phase 9 note).
 - 2026-06-25: **R13 vertical slice landed** (Phase 3 accounts + Phase 9 admin model/key
   mgmt + Phase 8 metering/quota). The hosted-deploy bundle is functional end-to-end.
-  Next candidates: billing/checkout (Phase 8 remainder), or the deferred personalization/
-  resume/teaching phases (4/5/7). Ask the owner which to take at the next gate.
+- 2026-06-25: **owner re-planning** (D9–D15 added). New near-term scope: durable Postgres
+  store on Docker, dynamic company-pack generation, plans + gating + invite codes,
+  admin-managed versioned prompts + guardrails, resumable sessions, accent-aware voice.
+  These become **Phases 11–16**. **Recommended build order (owner to confirm at this gate):**
+  1. **Phase 11 — Postgres/Docker foundation** (D9). Foundational; every new table
+     (prompts, company packs, credits, plans) wants a real DB + migrations. Do first.
+  2. **Phase 12 — Identity & resumable sessions** (D14). Recognize returning users; resume
+     an interrupted interview.
+  3. **Phase 13 — Plans, gating & invite codes** (D11). Free level-check → plan choice;
+     mocked payment; admin-minted credit codes. Builds on Phase 8 metering.
+  4. **Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13).
+  5. **Phase 15 — Dynamic company skill packs** (D10).
+  6. **Phase 16 — Accent-aware voice** (D15).
+  > Rationale for ordering: 11 unblocks all storage; 12/13 make hosted usable + monetizable;
+  > 14 hardens correctness/safety; 15/16 are high-value features that ride on the above.
+  > Owner may reorder — if you want a flashy feature first (e.g. dynamic company packs),
+  > say so and the agent will resequence.
 
 ---
 
@@ -172,14 +215,80 @@ here must be **configurable from the admin UI with no redeploy** ("configurable 
 > quota-checked. Ship that slice before the fancier billing/crypto/agent-console parts.
 
 ### Phase 10 — Content & skills at scale
-- [ ] Skill-pack generator: company name → web research → drafted `skills/<company>.md` → owner review queue
+> **Superseded by Phase 15** (the company-pack generator moved there with D10). Keep the
+> remaining cross-cutting items here.
+- [ ] ~~Skill-pack generator~~ → see **Phase 15**.
 - [ ] Authoring skills/docs so ANY model/agent can extend data safely (schemas + validation + examples)
 - [ ] Role packs (frontend, data, PM, …) and non-tech interview support
+
+---
+
+## Phases 11–16 — owner re-planning 2026-06-25 (D9–D15)
+
+### Phase 11 — Postgres/Docker datastore foundation (D9)  ⬅ recommended next
+Replace `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + hosted.
+- [ ] `docker compose` with Postgres 16 + a volume; `.env` for `DATABASE_URL`; Make targets
+      (`make db-up` / `make db-down` / `make db-migrate`).
+- [ ] Data-access + migration layer (Drizzle ORM recommended — confirm Q5). Define schema
+      for everything that exists today: users, sessions, magic_links, profiles, calibrations,
+      interviews, weaknesses, models, usage_events.
+- [ ] Port every `server/src/db.ts` query to the new layer behind the **same function
+      signatures** so routes don't change; keep encryption-at-rest for secrets.
+- [ ] Migration/import path for existing `~/.senior-bro/data.db` rows (one-time script).
+- [ ] Update CLAUDE.md architecture + `make check`/CI to boot Postgres (service container).
+- [ ] Decide local-mode story (Q7): single seeded account on the same Postgres.
+- **Gate: owner reviews before Phase 12.** Supersedes the zero-deps rule for the server.
+
+### Phase 12 — Identity & resumable sessions (D14)
+- [ ] Returning-user recognition: durable session (already cookie-based) + "welcome back";
+      remember-me; clean re-auth when expired.
+- [ ] Detect an **in-progress interview** on login and offer **Resume** (server transcript is
+      source of truth); resume restores the exact phase/turn, voice or text.
+- [ ] "Your sessions" list: past + resumable interviews per user.
+- [ ] Robust per-user data partitioning review (every query scoped by user; add DB constraints
+      / row ownership checks) for long-term reliability.
+
+### Phase 13 — Plans, gating & invite codes (D11)
+- [ ] Plan model: `free-intro`, `host-models` (paid), `byok` (free), `local-cli` (free).
+- [ ] **Free level-check**: a very short calibration interview runs with no plan; after it,
+      gate further interviews behind a plan choice.
+- [ ] Entitlement check server-side before any paid (host-key) call; friendly paywall UX.
+- [ ] **Mocked payment** flow (choose plan → "pay" → entitlement granted); pluggable for real
+      Stripe/crypto later (Phase 8).
+- [ ] **Invite codes**: admin mints codes with a credit balance + expiry; redeeming credits a
+      user; credit is decremented by metered usage. Admin console to create/list/revoke codes.
+- [ ] User billing/usage page: current plan, credit left, usage this period.
+
+### Phase 14 — Admin-managed versioned prompts + guardrails (D12, D13)
+- [ ] Move prompts from `server/src/prompts.ts` constants into a DB table:
+      `prompt_key` → many **versions** (body, author, created_at, active flag).
+- [ ] Admin UI: edit a prompt → saves a new version; diff vs. previous; set active; rollback.
+- [ ] Code ships the **seed/default version**; DB override wins when present.
+- [ ] **Guardrail frame**: a fixed, non-editable wrapper around every interview prompt that
+      pins the model to the interview task and treats candidate text as untrusted content
+      (resists "ignore previous instructions", topic/role changes). Admin bodies live inside it.
+- [ ] Red-team test set (jailbreak attempts) run against the guardrail in CI.
+
+### Phase 15 — Dynamic company skill packs (D10)
+- [ ] On unknown company: model **web-searches** company + domain + role interview process
+      (source per Q4) and drafts a structured pack.
+- [ ] Store generated packs in DB (cache + reuse across users); migrate the 4 static
+      `skills/*.md` in as seeds; keep the markdown+frontmatter shape.
+- [ ] Admin review queue: approve / edit / publish / refresh a generated pack; staleness TTL.
+- [ ] Interview setup uses the stored pack (generate-on-miss, then cache).
+
+### Phase 16 — Accent-aware voice (D15)
+- [ ] Stop auto-sending raw STT. Add an **editable transcript** the user confirms before send
+      (universal fallback).
+- [ ] Where the provider supports it, send **audio directly to the model** (accent help) instead
+      of/in addition to STT.
+- [ ] Capability detection: pick audio-native vs. editable-transcript per configured model.
 
 ---
 
 ## Working agreement recap
 
 1. One phase at a time; owner reviews at every gate.
-2. Verification gate before any commit: `make check` (typecheck + build + smoke; lint once Phase 2 lands).
+2. Verification gate before any commit: `make check` (typecheck + build + smoke + lint).
+   Run `make e2e` when a UI flow changed. From Phase 11, `make check` also needs Postgres up.
 3. Mark checkboxes here, log milestones in `memory/`, keep `CLAUDE.md` architecture section current.
