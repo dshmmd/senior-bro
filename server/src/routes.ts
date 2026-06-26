@@ -635,7 +635,13 @@ api.delete('/admin/packs/:id', async (c) => {
 api.get('/skills', async (c) => {
   const packs = await db.listPublishedPacks()
   return c.json(
-    packs.map((p) => ({ id: String(p.id), company: p.company, roles: p.roles, summary: p.summary })),
+    packs.map((p) => ({
+      id: String(p.id),
+      company: p.company,
+      roles: p.roles,
+      summary: p.summary,
+      source: p.source,
+    })),
   )
 })
 

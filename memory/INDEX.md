@@ -57,6 +57,11 @@ One entry per completed milestone. Read this before working on the repo.
   rollback (`Admin.tsx` "System prompts", `/api/admin/prompts*`, `db.activePromptBody`); seed bodies
   are `{{PLACEHOLDER}}` templates; fixed `wrapGuardrail` frame around interview/coaching (anti-jailbreak);
   red-team CI test. R17 + R19 done. Next = **Phase 15 (dynamic company packs), or Phase 17 R22/R23**.
+- [2026-06-26 — R22: Tiered target](2026-06-26-r22-tiered-target.md) —
+  pick a **Tier** (1/2/3 = FAANG-bar/scale-up/general) when the company is unknown; tiers seeded as
+  `source:'tier'` company packs (`TIER_SEED_PACKS`, stable `tier-N` slugs) reusing the Phase 15
+  pipeline; ProfileSetup tier cards; `/api/skills` returns `source`. No migration. R22 done.
+  Next = **R23 (evidence-gated knowledge)** to close Phase 17.
 - [2026-06-26 — Phase 15: Dynamic company packs](2026-06-26-phase15-dynamic-company-packs.md) —
   company packs moved into the DB (`company_packs`, migration 0005); generate-on-miss
   (`POST /api/packs/ensure` → model draft, Anthropic `web_search` D16) cached + reused (slug-keyed);

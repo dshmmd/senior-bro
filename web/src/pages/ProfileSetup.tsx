@@ -20,6 +20,7 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
   }, [])
 
   const [researching, setResearching] = useState(false)
+  const tiers = packs.filter((p) => p.source === 'tier')
 
   const save = async () => {
     setBusy(true)
@@ -69,33 +70,44 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
           onChange={(e) => setRole(e.target.value)}
         />
 
-        <label>Company interview style (optional — pick a known playbook)</label>
-        <select
-          value={skillPack}
-          onChange={(e) => {
-            setSkillPack(e.target.value)
-            const p = packs.find((x) => x.id === e.target.value)
-            if (p && p.company !== 'Generic Startup') setCompany(p.company)
-          }}
-        >
-          <option value="">No specific company / research one below</option>
-          {packs.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.company} — {p.summary}
-            </option>
-          ))}
-        </select>
-
-        <label>…or just name your target company — we&apos;ll research its interview style</label>
+        <label>Target company (optional — we&apos;ll research its interview style)</label>
         <input
           value={company}
           placeholder="e.g. Stripe"
           onChange={(e) => {
             setCompany(e.target.value)
-            // Typing a fresh company name overrides a previously picked playbook.
+            // Typing a company overrides a previously picked tier.
             if (skillPack) setSkillPack('')
           }}
         />
+
+        {tiers.length > 0 && (
+          <>
+            <label style={{ marginTop: 12 }}>Don&apos;t know the company? Aim for a tier instead</label>
+            <div className="provider-grid">
+              {tiers.map((tier) => (
+                <div
+                  key={tier.id}
+                  className="card clickable"
+                  style={{ borderColor: skillPack === tier.id ? 'var(--accent)' : undefined }}
+                  onClick={() => {
+                    if (skillPack === tier.id) {
+                      setSkillPack('')
+                      setCompany('')
+                    } else {
+                      setSkillPack(tier.id)
+                      // The tier becomes the "target" — shown in the interview + report.
+                      setCompany(tier.company)
+                    }
+                  }}
+                >
+                  <b>{tier.company}</b>
+                  <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>{tier.summary}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <label>Technologies / skills, comma-separated</label>
         <input

@@ -16,10 +16,10 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > mocked checkout + invite-code credit; **14: admin-managed versioned prompts in the DB + fixed
 > guardrail frame + red-team CI test — prompts have now left `prompts.ts` constants**). **Phase 16
 > voice** (R20) shipped (editable transcript; native audio deferred). **Phase 17 partial:** R21 (Back
-> nav) + R24 (multi-profile) ✅; **remaining R22 (fuzzy/tiered target) + R23 (evidence-gated
+> nav) + R24 (multi-profile) + **R22 (fuzzy/tiered target)** ✅; **remaining R23 (evidence-gated
 > knowledge)**. **Phase 15 ✅ shipped** (dynamic company packs in the DB — generate-on-miss +
 > cache/reuse + Anthropic web-search + admin review queue; the 4 `skills/*.md` are now just seeds).
-> **Next up = Phase 16 (accent voice, mostly closed) or finish Phase 17 R22/R23.**
+> **Next up = Phase 17 R23 (evidence-gated knowledge) to close the phase.**
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -125,9 +125,10 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 - [x] R21: **Back navigation** — shared "← Back" in the app shell on settings/onboarding screens
   (setup/plan/profile/calibration), shown once the user has a calibrated profile so it's never a
   dead end. Shipped 2026-06-25 (`web/src/App.tsx`). (Phase 17)
-- [ ] R22: **Fuzzy / tiered target** — if the user doesn't know the exact company, let them pick a
-  **Tier 1 / Tier 2 / …** (FAANG-tier, top-startup, mid, etc.) so setting a target is easy; the
-  generated pack targets that tier's bar. Extends company packs (D10 · R14 · Phase 15/17).
+- [x] R22: **Fuzzy / tiered target** — if the user doesn't know the exact company, they pick a
+  **Tier 1 / Tier 2 / Tier 3** (FAANG-bar / scale-up / general) so setting a target is easy; the
+  tier pack targets that tier's bar. Shipped 2026-06-26: tiers seeded as `source:'tier'` company
+  packs (`TIER_SEED_PACKS`), tier cards in ProfileSetup, `/api/skills` returns `source`. (D10 · Phase 17)
 - [ ] R23: **Evidence-gated knowledge** — don't accept a skill/claim from the user as true until
   they've actually answered questions demonstrating it; the profile/level reflects *shown*
   ability, not self-report. (Phase 17, ties into calibration R6 + weaknesses R7)

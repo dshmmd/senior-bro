@@ -3,6 +3,7 @@ export interface SkillPackSummary {
   company: string
   roles: string[]
   summary: string
+  source: 'seed' | 'generated' | 'tier'
 }
 
 export interface Profile {

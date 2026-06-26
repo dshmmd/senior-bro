@@ -7,7 +7,7 @@ import { DEFAULT_MODELS, isCliProvider, loadConfig, type AppConfig, type Provide
 import { decryptSecret, encryptSecret } from './crypto.js'
 import { LOCAL_USER_ID } from './mode.js'
 import { PROMPT_SEEDS, seedBody, type PromptKey } from './prompts.js'
-import { loadSeedPacks } from './skills.js'
+import { loadSeedPacks, TIER_SEED_PACKS } from './skills.js'
 import * as t from './schema.js'
 
 // ── public row shapes (snake_case — unchanged so routes/web don't move) ──
@@ -149,23 +149,38 @@ async function seed(): Promise<void> {
   await seedPacks()
 }
 
-/** Seed the static `skills/*.md` packs into the DB once (D10 / Phase 15), as `source: 'seed'`. */
+/**
+ * Seed the built-in packs into the DB once: the static `skills/*.md` companies (`source: 'seed'`)
+ * and the tiered targets (`source: 'tier'`, stable `tier-N` slugs — R22). Both keyed by slug so
+ * boot is idempotent and admins can edit/delete seeds without them reappearing on the next start.
+ */
 async function seedPacks(): Promise<void> {
   const existing = await db.select({ slug: t.companyPacks.slug }).from(t.companyPacks)
   const have = new Set(existing.map((r) => r.slug))
-  const missing = loadSeedPacks().filter((p) => !have.has(packSlug(p.company)))
-  if (missing.length === 0) return
-  await db.insert(t.companyPacks).values(
-    missing.map((p) => ({
-      slug: packSlug(p.company),
+  const rows = [
+    ...loadSeedPacks()
+      .filter((p) => !have.has(packSlug(p.company)))
+      .map((p) => ({
+        slug: packSlug(p.company),
+        company: p.company,
+        roles: JSON.stringify(p.roles),
+        summary: p.summary,
+        body: p.body,
+        status: 'published',
+        source: 'seed',
+      })),
+    ...TIER_SEED_PACKS.filter((p) => !have.has(p.slug)).map((p) => ({
+      slug: p.slug,
       company: p.company,
       roles: JSON.stringify(p.roles),
       summary: p.summary,
       body: p.body,
       status: 'published',
-      source: 'seed',
+      source: 'tier',
     })),
-  )
+  ]
+  if (rows.length === 0) return
+  await db.insert(t.companyPacks).values(rows)
 }
 
 /** Seed the default (version 1, author 'seed') body for any prompt key not yet in the DB (D12). */
@@ -859,7 +874,7 @@ export async function activatePromptVersion(key: string, version: number): Promi
 // ── dynamic company packs (D10 / Phase 15) ───────────────────────────
 
 export type PackStatus = 'published' | 'draft' | 'archived'
-export type PackSource = 'seed' | 'generated'
+export type PackSource = 'seed' | 'generated' | 'tier'
 
 export interface CompanyPack {
   id: number

@@ -354,9 +354,13 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - [x] **R21 Back navigation** ✅ (2026-06-25): shared "← Back" rendered in the app shell for
       setup/plan/profile/calibration, gated on the user having a calibrated profile (so it never
       dead-ends during first-run onboarding). One place in `App.tsx`, no per-page edits.
-- [ ] **R22 Fuzzy/tiered target:** when the company is unknown, let the user pick a **Tier** (e.g.
-      Tier 1 = FAANG-bar, Tier 2 = strong scale-up, Tier 3 = general) instead of an exact name;
-      the pack/interview calibrates to that tier. Builds on Phase 15 company packs (D10).
+- [x] **R22 Fuzzy/tiered target** ✅ (2026-06-26): when the company is unknown, the user picks a
+      **Tier** (Tier 1 = FAANG-bar / Tier 2 = high-growth scale-up / Tier 3 = established-general)
+      instead of an exact name. Tiers are seeded as company packs (`source: 'tier'`, stable
+      `tier-N` slugs, `TIER_SEED_PACKS` in `skills.ts`) so they ride the Phase 15 pack pipeline —
+      picking a tier attaches its playbook to the profile and calibrates the interview to that bar.
+      ProfileSetup shows tier cards under a free-text company box; `/api/skills` now returns `source`
+      so the UI splits tiers from companies. Builds on Phase 15 company packs (D10).
 - [ ] **R23 Evidence-gated knowledge:** never accept a self-reported skill as true until the user
       has answered questions demonstrating it; level/strengths reflect *shown* ability. Ties into
       calibration (R6) and weakness detection (R7).
