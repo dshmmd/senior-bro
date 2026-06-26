@@ -201,6 +201,7 @@ export interface ModelOption {
   label: string
   provider: string
   model: string
+  base_url: string | null
   enabled: boolean
   is_default: boolean
   price_in: number
@@ -359,6 +360,7 @@ export const api = {
     label: string
     provider: string
     model: string
+    base_url?: string
     apiKey?: string
     enabled: boolean
     is_default: boolean
@@ -369,6 +371,7 @@ export const api = {
     id: number,
     patch: Partial<{
       label: string
+      base_url: string
       apiKey: string
       enabled: boolean
       is_default: boolean

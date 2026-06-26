@@ -66,6 +66,11 @@ One entry per completed milestone. Read this before working on the repo.
   `source:'tier'` company packs (`TIER_SEED_PACKS`, stable `tier-N` slugs) reusing the Phase 15
   pipeline; ProfileSetup tier cards; `/api/skills` returns `source`. No migration. R22 done.
   Next = **R23 (evidence-gated knowledge)** to close Phase 17.
+- [2026-06-27 — Phase 18: Arvan host provider + metering](2026-06-27-phase18-arvan-provider.md) —
+  `arvan` OpenAI-compatible provider (per-model gateway base URL in path + `apikey` auth + `max_tokens`);
+  `models.base_url` (migration 0008); shared `chatOpenAICompatible`. Metering reads prompt/completion
+  tokens (ignores Arvan's `output_tokens:0`) with a zero-usage→char-estimate fallback (R25). Tests:
+  `metering.test.mjs` + `scripts/verify-arvan.mjs`. Owner: add an Arvan model in Admin. (R25/D19)
 - [2026-06-27 — Phase 4: Personalization core](2026-06-27-phase4-personalization.md) —
   per-profile event log (`user_events`) + LLM-distilled "user model" (`user_models`, migration 0007)
   re-distilled after each interview (`personalization.distill` prompt) and injected into interview/

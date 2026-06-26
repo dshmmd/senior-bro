@@ -240,19 +240,27 @@ const userModelSchema = z.object({ summary: z.string().trim().min(1).max(8000) }
 
 const weaknessStatusSchema = z.object({ status: z.enum(['open', 'improving', 'resolved']) })
 
-const modelCreateSchema = z.object({
-  label: z.string().trim().min(1).max(120),
-  provider: z.enum(['anthropic', 'openai', 'mock']),
-  model: z.string().trim().min(1).max(120),
-  apiKey: z.string().max(400).optional(),
-  enabled: z.boolean().default(true),
-  is_default: z.boolean().default(false),
-  price_in: z.number().min(0).max(10000).default(0),
-  price_out: z.number().min(0).max(10000).default(0),
-})
+const modelCreateSchema = z
+  .object({
+    label: z.string().trim().min(1).max(120),
+    provider: z.enum(['anthropic', 'openai', 'arvan', 'mock']),
+    model: z.string().trim().min(1).max(120),
+    // Arvan (D19): the per-model gateway URL up to `/v1` — required for that provider.
+    base_url: z.string().trim().url().max(500).optional(),
+    apiKey: z.string().max(400).optional(),
+    enabled: z.boolean().default(true),
+    is_default: z.boolean().default(false),
+    price_in: z.number().min(0).max(10000).default(0),
+    price_out: z.number().min(0).max(10000).default(0),
+  })
+  .refine((v) => v.provider !== 'arvan' || (v.base_url?.length ?? 0) > 0, {
+    message: 'Arvan models need a gateway base URL',
+    path: ['base_url'],
+  })
 
 const modelUpdateSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
+  base_url: z.string().trim().url().max(500).optional(),
   apiKey: z.string().max(400).optional(),
   enabled: z.boolean().optional(),
   is_default: z.boolean().optional(),
@@ -451,6 +459,7 @@ api.post('/admin/models', async (c) => {
       provider: body.provider,
       apiKey: body.apiKey?.trim() ?? '',
       model: body.model,
+      baseUrl: body.base_url?.trim(),
     })
     if (!check.ok) throw new HttpError(400, `key validation failed: ${check.error ?? 'unknown'}`)
   }
@@ -458,6 +467,7 @@ api.post('/admin/models', async (c) => {
     label: body.label,
     provider: body.provider,
     model: body.model,
+    base_url: body.base_url?.trim() ?? null,
     apiKey: body.apiKey?.trim() ?? '',
     enabled: body.enabled,
     is_default: body.is_default,
@@ -473,6 +483,7 @@ api.patch('/admin/models/:id', async (c) => {
   const body = await parseBody(c, modelUpdateSchema)
   const updated = await db.updateModel(id, {
     label: body.label,
+    base_url: body.base_url?.trim(),
     enabled: body.enabled,
     is_default: body.is_default,
     price_in: body.price_in,

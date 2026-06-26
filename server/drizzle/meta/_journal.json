@@ -57,6 +57,13 @@
       "when": 1782505468371,
       "tag": "0007_perfect_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782508820732,
+      "tag": "0008_loud_bloodstorm",
+      "breakpoints": true
     }
   ]
 }

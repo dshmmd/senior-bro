@@ -42,6 +42,7 @@ export interface ModelOption {
   label: string
   provider: string
   model: string
+  base_url: string | null // OpenAI-compatible custom endpoint (D19, Arvan)
   enabled: boolean
   is_default: boolean
   price_in: number // USD per 1M input tokens
@@ -714,6 +715,7 @@ function toModel(r: ModelRow): ModelOption {
     label: r.label,
     provider: r.provider,
     model: r.model,
+    base_url: r.baseUrl,
     enabled: r.enabled,
     is_default: r.isDefault,
     price_in: r.priceIn,
@@ -752,13 +754,22 @@ export async function modelConfig(id: number): Promise<{ cfg: AppConfig; option:
   if (!row) return null
   const option = toModel(row)
   const apiKey = row.apiKeyEnc ? decryptSecret(row.apiKeyEnc) : ''
-  return { option, cfg: { provider: option.provider as Provider, apiKey, model: option.model } }
+  return {
+    option,
+    cfg: {
+      provider: option.provider as Provider,
+      apiKey,
+      model: option.model,
+      baseUrl: option.base_url ?? undefined,
+    },
+  }
 }
 
 export async function createModel(m: {
   label: string
   provider: string
   model: string
+  base_url?: string | null
   apiKey: string
   enabled: boolean
   is_default: boolean
@@ -772,6 +783,7 @@ export async function createModel(m: {
       label: m.label,
       provider: m.provider,
       model: m.model,
+      baseUrl: m.base_url ?? null,
       apiKeyEnc: m.apiKey ? encryptSecret(m.apiKey) : null,
       enabled: m.enabled,
       isDefault: m.is_default,
@@ -786,6 +798,7 @@ export async function updateModel(
   id: number,
   patch: Partial<{
     label: string
+    base_url: string | null
     enabled: boolean
     is_default: boolean
     price_in: number
@@ -800,6 +813,7 @@ export async function updateModel(
     .update(t.models)
     .set({
       label: patch.label ?? current.label,
+      baseUrl: patch.base_url !== undefined ? patch.base_url : current.baseUrl,
       enabled: patch.enabled ?? current.enabled,
       isDefault: patch.is_default ?? current.isDefault,
       priceIn: patch.price_in ?? current.priceIn,

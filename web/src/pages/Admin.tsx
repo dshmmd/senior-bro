@@ -9,12 +9,13 @@ import {
   type PromptVersion,
 } from '../api'
 
-const PROVIDERS = ['anthropic', 'openai', 'mock'] as const
+const PROVIDERS = ['anthropic', 'openai', 'arvan', 'mock'] as const
 
 const blankForm = {
   label: '',
   provider: 'anthropic' as string,
   model: 'claude-opus-4-8',
+  base_url: '',
   apiKey: '',
   enabled: true,
   is_default: false,
@@ -58,6 +59,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
         label: form.label,
         provider: form.provider,
         model: form.model,
+        base_url: form.provider === 'arvan' ? form.base_url || undefined : undefined,
         apiKey: form.apiKey || undefined,
         enabled: form.enabled,
         is_default: form.is_default,
@@ -209,10 +211,20 @@ export function Admin({ onBack }: { onBack: () => void }) {
             Model id
             <input
               value={form.model}
-              placeholder="claude-opus-4-8"
+              placeholder={form.provider === 'arvan' ? 'Claude-Haiku-4-5-006zc' : 'claude-opus-4-8'}
               onChange={(e) => setForm({ ...form, model: e.target.value })}
             />
           </label>
+          {form.provider === 'arvan' && (
+            <label>
+              Gateway base URL
+              <input
+                value={form.base_url}
+                placeholder="https://arvancloudai.ir/gateway/models/<Model>/<token>/v1"
+                onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+              />
+            </label>
+          )}
           <label>
             API key {form.provider === 'mock' && <span style={{ color: 'var(--muted)' }}>(not needed)</span>}
             <input

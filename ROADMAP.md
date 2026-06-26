@@ -401,16 +401,23 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 > models/metering/prompt stack and unlock real (Arvan-billed) usage; 20 is independent and can slot
 > anywhere; 21/22 are explicitly "later / after that" per the owner.
 
-### Phase 18 — ArvanCloud host provider + complete metering (R25, D19)
-- [ ] Per-model **configurable base URL** on the `openai` provider path (today hard-coded to
-      `api.openai.com`) so Arvan AIaaS (OpenAI-compatible) is just a model row with its base URL +
-      per-MTok in/out prices. Validate-key + chat + **streamed `usage`** all reuse the existing path.
-- [ ] **Metering coverage audit**: assert every host-model call routes through `runModel`/`recordUsage`
-      — interview, calibration, evaluation, **company-pack generation**, **post-interview distillation**
-      (already wrapped; confirm + lock with a test). No host token uncounted.
-- [ ] Confirm Arvan returns `usage` on streamed responses; if not, fall back to the char-estimate and
-      flag it in the admin UI so cost stays honest.
-- [ ] Admin-visible per-event usage audit (who/when/model/in-out tokens/cost) building on `usage_events`.
+### Phase 18 — ArvanCloud host provider + complete metering (R25, D19) — shipped 2026-06-27
+- [x] Per-model **configurable base URL + auth scheme**: refactored the `openai` path into a shared
+      `chatOpenAICompatible` fn; added an **`arvan`** provider (endpoint = the per-model gateway URL up
+      to `/v1` + `/chat/completions`; `Authorization: apikey <key>`; body uses `max_tokens`). `models`
+      gains a `base_url` column (migration 0008), threaded through `modelConfig`→`AppConfig.baseUrl`.
+      Admin "Add model" exposes provider `arvan` + a gateway-URL field; validate-key reuses the path.
+- [x] **Metering correctness + safety net** (R25): usage is read from `prompt_tokens`/`completion_tokens`
+      (Arvan also returns a misleading Anthropic-style `output_tokens: 0` — ignored). If a host call
+      reports zero usage, fall back to a char-estimate so **no host token is ever recorded as 0**. Every
+      host call already routes through `runModel`/`recordUsage` (interview, calibration, evaluation,
+      **company-pack generation**, **post-interview distillation**). Locked by `server/test/metering.test.mjs`
+      (uses the real Arvan `usage` sample) + `scripts/verify-arvan.mjs` (stub server proves endpoint/auth/body/usage).
+- [x] Streamed usage: we set `stream_options.include_usage`; if a gateway omits it, the zero-usage
+      fallback covers cost. (Live confirmation that Arvan returns streamed `usage` is an owner-side check.)
+- [ ] Admin-visible **per-event** usage audit (who/when/model/in-out/cost) — folds into the Phase 19
+      dashboard (today the admin sees per-user aggregates via `/api/admin/users`).
+- **Gate: owner reviews.** Owner action: add an Arvan model in Admin (gateway URL + apikey + per-MTok prices).
 
 ### Phase 19 — Admin dashboard upgrade (R26)
 - [ ] Model+price management tuned for Arvan: base URL, per-MTok input/output price, enable/default,

@@ -201,6 +201,8 @@ export const models = pgTable('models', {
   label: text('label').notNull(),
   provider: text('provider').notNull(),
   model: text('model').notNull(),
+  // OpenAI-compatible custom endpoint base (D19, Arvan): the per-model gateway URL up to `/v1`.
+  baseUrl: text('base_url'),
   apiKeyEnc: text('api_key_enc'),
   enabled: boolean('enabled').notNull().default(true),
   isDefault: boolean('is_default').notNull().default(false),

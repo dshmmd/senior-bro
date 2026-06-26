@@ -57,7 +57,24 @@ export async function chat(
     case 'anthropic':
       return chatAnthropic(cfg, system, messages, maxTokens, onDelta, options)
     case 'openai':
-      return chatOpenAI(cfg, system, messages, maxTokens, onDelta)
+      return chatOpenAICompatible(cfg, system, messages, maxTokens, onDelta, {
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        authHeader: `Bearer ${cfg.apiKey}`,
+        tokenField: 'max_completion_tokens',
+        label: 'OpenAI',
+      })
+    case 'arvan': {
+      // D19: ArvanCloud AIaaS. `baseUrl` is the per-model gateway URL up to `/v1`
+      // (the gateway token sits in that path); auth is `apikey <key>`, not Bearer.
+      const base = (cfg.baseUrl ?? '').replace(/\/+$/, '')
+      if (!base) throw new Error('Arvan model is missing its gateway base URL')
+      return chatOpenAICompatible(cfg, system, messages, maxTokens, onDelta, {
+        endpoint: `${base}/chat/completions`,
+        authHeader: `apikey ${cfg.apiKey}`,
+        tokenField: 'max_tokens',
+        label: 'Arvan',
+      })
+    }
     case 'claude-cli':
       return chatClaudeCli(cfg, system, messages, onDelta)
     case 'codex-cli':
@@ -105,22 +122,44 @@ async function chatAnthropic(
   }
 }
 
-async function chatOpenAI(
+/**
+ * A chat/completions `usage` row from any OpenAI-compatible provider. We read ONLY
+ * `prompt_tokens` / `completion_tokens` — the OpenAI-standard fields. Some gateways (Arvan
+ * for Claude models) ALSO return Anthropic-style `input_tokens`/`output_tokens` where
+ * `output_tokens` is a misleading `0`; ignoring those keeps metering correct (D19).
+ */
+export interface OpenAIUsage {
+  prompt_tokens?: number
+  completion_tokens?: number
+}
+
+export function openAiUsage(u?: OpenAIUsage): TokenUsage {
+  return { inputTokens: u?.prompt_tokens ?? 0, outputTokens: u?.completion_tokens ?? 0 }
+}
+
+interface OpenAICompatOpts {
+  endpoint: string
+  authHeader: string
+  /** Older OpenAI + Arvan use `max_tokens`; newer OpenAI models use `max_completion_tokens`. */
+  tokenField: 'max_tokens' | 'max_completion_tokens'
+  label: string
+}
+
+/** Shared request path for OpenAI-compatible providers (OpenAI + Arvan, D19). */
+async function chatOpenAICompatible(
   cfg: AppConfig,
   system: string,
   messages: ChatMessage[],
   maxTokens: number,
-  onDelta?: OnDelta,
+  onDelta: OnDelta | undefined,
+  opts: OpenAICompatOpts,
 ): Promise<ChatResult> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch(opts.endpoint, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${cfg.apiKey}`,
-    },
+    headers: { 'content-type': 'application/json', authorization: opts.authHeader },
     body: JSON.stringify({
       model: cfg.model,
-      max_completion_tokens: maxTokens,
+      [opts.tokenField]: maxTokens,
       stream: Boolean(onDelta),
       // ask for a usage row on the final SSE chunk when streaming
       ...(onDelta ? { stream_options: { include_usage: true } } : {}),
@@ -129,27 +168,27 @@ async function chatOpenAI(
   })
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`OpenAI API error ${res.status}: ${body.slice(0, 500)}`)
+    throw new Error(`${opts.label} API error ${res.status}: ${body.slice(0, 500)}`)
   }
 
-  interface OpenAIUsage {
-    prompt_tokens: number
-    completion_tokens: number
+  // Metering safety net (R25): if a host provider omits/zeroes usage (e.g. a gateway that
+  // doesn't honor stream usage), never record 0 — fall back to a char-based estimate.
+  const withFallback = (text: string, u?: OpenAIUsage): TokenUsage => {
+    const usage = openAiUsage(u)
+    if (usage.inputTokens === 0 && usage.outputTokens === 0) return estimateUsage(system, messages, text)
+    return usage
   }
-  const toUsage = (u?: OpenAIUsage): TokenUsage => ({
-    inputTokens: u?.prompt_tokens ?? 0,
-    outputTokens: u?.completion_tokens ?? 0,
-  })
 
   if (!onDelta) {
     const data = (await res.json()) as {
       choices: { message: { content: string } }[]
       usage?: OpenAIUsage
     }
-    return { text: data.choices[0]?.message.content ?? '', usage: toUsage(data.usage) }
+    const text = data.choices[0]?.message.content ?? ''
+    return { text, usage: withFallback(text, data.usage) }
   }
 
-  // parse the OpenAI SSE stream
+  // parse the OpenAI-style SSE stream
   const reader = res.body!.getReader() as ReadableStreamDefaultReader<Uint8Array>
   const decoder = new TextDecoder()
   let buffer = ''
@@ -178,7 +217,7 @@ async function chatOpenAI(
       }
     }
   }
-  return { text: full, usage: toUsage(usage) }
+  return { text: full, usage: withFallback(full, usage) }
 }
 
 // ── CLI providers (use a local subscription, no API key) ───────────

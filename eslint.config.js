@@ -23,6 +23,9 @@ export default tseslint.config(
             'server/drizzle.config.ts',
             'server/test/*.mjs',
           ],
+          // Config/test/verify files lint without a tsconfig project; the default-project matcher
+          // caps at 8 and we now have more (verify-* scripts + test files). Raise the cap.
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 30,
         },
         tsconfigRootDir: import.meta.dirname,
       },

@@ -23,7 +23,10 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > (event log + LLM-distilled per-profile "user model" injected into interviews + one-tap steering chips +
 > "what we know about you" page; capability tiers D3 deferred). Next work is owner's call — see ROADMAP
 > Phases 5/7 (resume/opportunity pipeline, learn-while-interviewing), finish Phase 4 (D3 capability tiers),
-> or new owner direction.
+> or new owner direction. **Phase 18 (ArvanCloud host provider + metering hardening) ✅ shipped 2026-06-27**
+> (R25/D19): `arvan` OpenAI-compatible provider with per-model gateway base URL + `apikey` auth; usage
+> metered from prompt/completion tokens with a zero-usage fallback. Owner additions **R26–R29** (admin
+> dashboard upgrade, NL-store lazy migration D18, k8s deploy, Prometheus/Grafana) are queued.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -145,11 +148,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   switcher pills + New. (Phase 17)
 
 ### Owner additions 2026-06-27 (R25–R29) — Arvan host, admin UX, data future-proofing, deploy, metrics
-- [ ] R25: **Complete & auditable host-token metering** — guarantee *every* model call on **our host
-  models** is metered, including first-time **company-pack generation** and the post-interview
-  **distillation** call; expose an admin-visible per-event audit so no host token goes uncounted.
-  Extends R13/Phase 8 (metering already wraps every `runModel`; this is a coverage audit + hardening +
-  the Arvan provider below). (D4 · Phase 18)
+- [x] R25: **Complete & auditable host-token metering** — every model call on our host models is
+  metered, incl. **company-pack generation** + post-interview **distillation**. Shipped 2026-06-27
+  (Phase 18): usage read from `prompt_tokens`/`completion_tokens` (ignoring Arvan's misleading
+  `output_tokens:0`); **zero-usage → char-estimate fallback** so no host token records as 0; locked by
+  `server/test/metering.test.mjs` + `scripts/verify-arvan.mjs`. Admin **per-event** audit *view* still
+  pending → folded into R26/Phase 19. (D4/D19 · Phase 18)
 - [ ] R26: **Admin dashboard upgrade** — (a) first-class **model + price management for ArvanCloud
   AIaaS** (OpenAI-compatible; per-MTok **input/output** prices; configurable base URL per model — see
   D19), and (b) **frictionless system-prompt version review/rollback** (diff/compare versions, one-tap
@@ -188,8 +192,9 @@ senior-bro (npm workspace monorepo)
 │   ├── src/admin.ts      requireAdmin guard (local owner + SENIORBRO_ADMIN_EMAILS)
 │   ├── src/mailer.ts     dependency-free magic-link delivery (log + optional webhook)
 │   ├── src/http.ts       shared HttpError
-│   ├── src/providers.ts  LLM abstraction: anthropic | openai | claude-cli | codex-cli | mock
-│   │                     (chat() returns text + token usage; ChatOptions.webSearch → Anthropic web_search, D16)
+│   ├── src/providers.ts  LLM abstraction: anthropic | openai | arvan | claude-cli | codex-cli | mock
+│   │                     (chat() returns text + usage; shared chatOpenAICompatible for openai+arvan, D19;
+│   │                     ChatOptions.webSearch → Anthropic web_search, D16; zero-usage→char-estimate fallback)
 │   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack, personalization.distill)
 │   │                     + guardrail frame + code-level claims/evidence + user-model blocks (R23/D2) + render*()
 │   ├── src/skills.ts     loadSeedPacks(): reads skills/*.md — SEED ONLY (runtime packs live in company_packs, D10)
