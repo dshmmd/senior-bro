@@ -10,6 +10,38 @@ interface Msg {
 
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '')
 
+/**
+ * One-tap steering chips (Phase 4). Each sends a short request the interviewer honors now, and a
+ * `preference` label the server logs as an event so the user-model distiller learns recurring asks.
+ */
+const STEER_CHIPS: { label: string; phrase: string; pref: string }[] = [
+  {
+    label: '🔥 Harder',
+    phrase: 'That felt easy — please push me with a harder question.',
+    pref: 'wants harder questions',
+  },
+  {
+    label: '🐢 Ease up',
+    phrase: 'Could we slow the pace a little and take it one step at a time?',
+    pref: 'wants an easier pace',
+  },
+  {
+    label: '🏗 More system design',
+    phrase: "I'd like to practice more system design — can we go there?",
+    pref: 'wants more system design',
+  },
+  {
+    label: '🤝 More behavioral',
+    phrase: 'Can we do more behavioral questions?',
+    pref: 'wants more behavioral',
+  },
+  {
+    label: '💡 Explain that',
+    phrase: "I'm not sure I know this — can you explain it before I answer?",
+    pref: 'asked for an explanation',
+  },
+]
+
 export function Interview({
   profile,
   mode,
@@ -88,7 +120,7 @@ export function Interview({
 
   useEffect(() => () => stopSpeaking(), [])
 
-  const send = async (text: string) => {
+  const send = async (text: string, preference?: string) => {
     if (!text.trim() || interviewId === null || thinking || partial !== null) return
     speaker.current.cancel()
     setMessages((m) => [...m, { role: 'user', content: text.trim() }])
@@ -96,7 +128,7 @@ export function Interview({
     setInterim('')
     setThinking(true)
     try {
-      const r = await api.sendMessage(interviewId, text.trim(), onDelta)
+      const r = await api.sendMessage(interviewId, text.trim(), onDelta, preference)
       setMessages((m) => [...m, { role: 'assistant', content: r.message }])
       if (mode === 'voice') speaker.current.flush()
       if (r.done) setDone(true)
@@ -213,6 +245,23 @@ export function Interview({
           {listening
             ? 'Listening — tap ■ to stop, then review and edit before sending'
             : 'Tap 🎤 to speak. Your words land in the box below — fix anything, then Send.'}
+        </div>
+      )}
+
+      {!done && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          {STEER_CHIPS.map((chip) => (
+            <button
+              key={chip.pref}
+              className="ghost"
+              style={{ fontSize: 13, padding: '4px 10px' }}
+              disabled={busy}
+              title="Steer the interview — we'll remember this for next time"
+              onClick={() => void send(chip.phrase, chip.pref)}
+            >
+              {chip.label}
+            </button>
+          ))}
         </div>
       )}
 

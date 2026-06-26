@@ -9,6 +9,7 @@ import { Calibration } from './pages/Calibration'
 import { Dashboard } from './pages/Dashboard'
 import { Interview } from './pages/Interview'
 import { Progress } from './pages/Progress'
+import { Memory } from './pages/Memory'
 import { Plan } from './pages/Plan'
 
 export type View =
@@ -22,6 +23,7 @@ export type View =
   | { name: 'plan' }
   | { name: 'dashboard' }
   | { name: 'progress' }
+  | { name: 'memory' }
   | {
       name: 'interview'
       mode: 'voice' | 'text'
@@ -151,6 +153,15 @@ export function App() {
             💳 plan
           </div>
         )}
+        {profile?.level && (
+          <div
+            className="pill clickable"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setView({ name: 'memory' })}
+          >
+            🧠 you
+          </div>
+        )}
         {account.role === 'admin' && (
           <div
             className="pill clickable"
@@ -214,6 +225,7 @@ export function App() {
           />
         )}
         {view.name === 'progress' && <Progress onBack={() => setView({ name: 'dashboard' })} />}
+        {view.name === 'memory' && <Memory onBack={() => setView({ name: 'dashboard' })} />}
         {view.name === 'interview' && profile && (
           <Interview
             profile={profile}

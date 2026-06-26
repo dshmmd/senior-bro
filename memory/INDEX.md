@@ -66,6 +66,12 @@ One entry per completed milestone. Read this before working on the repo.
   `source:'tier'` company packs (`TIER_SEED_PACKS`, stable `tier-N` slugs) reusing the Phase 15
   pipeline; ProfileSetup tier cards; `/api/skills` returns `source`. No migration. R22 done.
   Next = **R23 (evidence-gated knowledge)** to close Phase 17.
+- [2026-06-27 — Phase 4: Personalization core](2026-06-27-phase4-personalization.md) —
+  per-profile event log (`user_events`) + LLM-distilled "user model" (`user_models`, migration 0007)
+  re-distilled after each interview (`personalization.distill` prompt) and injected into interview/
+  coaching prompts as a code-level block; one-tap steering chips record `preference` events; "what we
+  know about you" page (`Memory.tsx`, 🧠 you) read/correct/delete (`/api/me/model`). D3 capability tiers
+  deferred. `scripts/verify-ph4.mjs` green. **All owner phases + Phase 4 core done.**
 - [2026-06-26 — Phase 15: Dynamic company packs](2026-06-26-phase15-dynamic-company-packs.md) —
   company packs moved into the DB (`company_packs`, migration 0005); generate-on-miss
   (`POST /api/packs/ensure` → model draft, Anthropic `web_search` D16) cached + reused (slug-keyed);

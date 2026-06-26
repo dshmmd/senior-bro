@@ -102,6 +102,23 @@ export interface Progress {
   overall_completion: number
 }
 
+export interface UserEvent {
+  id: number
+  profile_id: number
+  kind: string
+  detail: string
+  interview_id: number | null
+  created_at: string
+}
+
+export interface UserModelInfo {
+  profile: { id: number; role: string; company: string | null; level: string | null }
+  summary: string
+  edited: boolean
+  updated_at: string | null
+  events: UserEvent[]
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { 'content-type': 'application/json' },
@@ -309,8 +326,12 @@ export const api = {
       { profile_id, mode, kind, weakness_id },
       onDelta,
     ),
-  sendMessage: (id: number, content: string, onDelta: (text: string) => void) =>
-    ssePost<{ message: string; done: boolean }>(`/interviews/${id}/messages`, { content }, onDelta),
+  sendMessage: (id: number, content: string, onDelta: (text: string) => void, preference?: string) =>
+    ssePost<{ message: string; done: boolean }>(
+      `/interviews/${id}/messages`,
+      preference ? { content, preference } : { content },
+      onDelta,
+    ),
   finishInterview: (id: number) => post<InterviewReport>(`/interviews/${id}/finish`, {}),
   getInterview: (id: number) => request<InterviewDetail>(`/interviews/${id}`),
   abandonInterview: (id: number) => request<{ ok: boolean }>(`/interviews/${id}`, { method: 'DELETE' }),
@@ -318,6 +339,11 @@ export const api = {
   listWeaknesses: () => request<Weakness[]>('/weaknesses'),
   setWeaknessStatus: (id: number, status: string) => post(`/weaknesses/${id}/status`, { status }),
   progress: () => request<Progress | null>('/progress'),
+  // personalization: "what we know about you" (D2 / D6)
+  getMyModel: () => request<UserModelInfo | null>('/me/model'),
+  saveMyModel: (summary: string) =>
+    request<{ ok: boolean }>('/me/model', { method: 'PUT', body: JSON.stringify({ summary }) }),
+  clearMyModel: () => request<{ ok: boolean }>('/me/model', { method: 'DELETE' }),
   // model catalog & usage (user-facing)
   models: () => request<{ models: ModelOption[]; selected_model_id: number | null }>('/models'),
   selectModel: (model_id: number) => post<{ ok: boolean }>('/models/select', { model_id }),

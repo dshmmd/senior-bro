@@ -378,6 +378,9 @@ function mockReply(system: string, messages: ChatMessage[]): string {
       skill_evidence: skillEvidence,
     })
   }
+  // Phase 4: distilled "what we know about you" learner model.
+  if (system.includes('learner profile'))
+    return 'You communicate clearly and stay calm under follow-ups, and your fundamentals are solid. The recurring gap is system-design depth — you tend to stay high-level and skip capacity estimation. You prefer a steady pace. Focus next on back-of-the-envelope sizing for a few classic systems.'
   // interview / coaching conversation: 3 questions, then wrap
   const turns = messages.filter((m) => m.role === 'user').length
   if (turns > MOCK_QUESTIONS.length)

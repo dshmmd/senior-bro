@@ -162,12 +162,26 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
   bundle (Phases 8/9) is the owner's stated must-have before charging anyone.
 - Deferred: host-key pool for subscribers (belongs with Phase 8/9 admin key management).
 
-### Phase 4 — Personalization engine ("it knows me")
-- [ ] Event log: every action (answers, skips, durations, struggles, choices) appended per user
-- [ ] User-model document distilled by LLM after each session; injected into all prompts (D2)
-- [ ] Interactive micro-prompts instead of forms — one-tap chips ("more system design", "easier pace")
-- [ ] "What you know about me" page — user can read/correct/delete their model
-- [ ] Capability tiers for BYOK consistency (D3)
+### Phase 4 — Personalization engine ("it knows me") — core shipped 2026-06-27
+- [x] Event log: lifecycle + steering actions appended per profile (`user_events`, migration 0007):
+      profile_created / calibration / interview_started / interview_finished / preference.
+- [x] User-model document distilled by LLM after each session; injected into all prompts (D2).
+      `user_models` (1:1 per profile); re-distilled in `finishInterview` from prior model + recent
+      events + the fresh report (`personalization.distill` versioned prompt). Injected as a code-level
+      block in `renderInterviewSystem`/`renderCoachingSystem` (applies on every prompt version, like the
+      R23 evidence block). Best-effort — a distill failure never blocks finishing the interview.
+- [x] Interactive micro-prompts — one-tap steering chips in the interview composer (harder / ease up /
+      more system design / more behavioral / explain). Each sends a request the interviewer honors now
+      AND records a `preference` event the distiller learns from (`messageSchema.preference`).
+- [x] "What we know about you" page (`web/src/pages/Memory.tsx`, topbar 🧠 you) — read the distilled
+      model + recent activity, **correct** it by hand (marked `edited`; folded back into the next
+      distill), or **delete** it (D6). `GET/PUT/DELETE /api/me/model`, resolves the active profile.
+- [ ] **Capability tiers for BYOK consistency (D3)** — DEFERRED: distinct from personalization (it's
+      about output parity across a $5 Haiku key vs an Opus key). Worth its own slice; flagged at the gate.
+- Verified: `make check` + `make e2e` green; `scripts/verify-ph4.mjs` proves events→distill→inject→
+  chips→read/correct/delete end-to-end on the mock provider.
+- **Gate: owner reviews before next phase** (Phase 5 resume/opportunity, Phase 7 learn-while-interviewing,
+  or finish Phase 4 with capability tiers).
 
 ### Phase 5 — Resume & opportunity pipeline
 - [ ] Resume intake (PDF/text upload → parsed into profile) or guided resume *builder* interview

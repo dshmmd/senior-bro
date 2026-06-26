@@ -25,6 +25,7 @@ import {
   renderCalibrationGrade,
   renderCoachingSystem,
   renderCompanyPack,
+  renderDistill,
   renderEvaluation,
   renderInterviewSystem,
 } from './prompts.js'
@@ -228,7 +229,14 @@ const interviewSchema = z.object({
   weakness_id: z.number().int().positive().optional(),
 })
 
-const messageSchema = z.object({ content: z.string().trim().min(1).max(8000) })
+const messageSchema = z.object({
+  content: z.string().trim().min(1).max(8000),
+  // Optional one-tap steering label (Phase 4 chips) — logged as a preference event for the
+  // user-model distiller. The message content still flows normally so the interviewer adapts now.
+  preference: z.string().trim().max(60).optional(),
+})
+
+const userModelSchema = z.object({ summary: z.string().trim().min(1).max(8000) })
 
 const weaknessStatusSchema = z.object({ status: z.enum(['open', 'improving', 'resolved']) })
 
@@ -707,6 +715,7 @@ api.post('/profile', async (c) => {
     years_experience: body.years_experience,
     notes: body.notes ?? null,
   })
+  await db.recordEvent(profile.id, 'profile_created', profile.role)
   return c.json(profile)
 })
 
@@ -768,6 +777,7 @@ api.post('/calibration/submit', async (c) => {
   const result = extractJson<{ level: string; summary: string }>(raw)
   await db.saveCalibrationResult(calibration_id, result)
   await db.setProfileLevel(profile.id, result.level, result.summary)
+  await db.recordEvent(profile.id, 'calibration', `assessed level: ${result.level}`)
   return c.json(result)
 })
 
@@ -777,21 +787,62 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
   const profile = await db.getProfile(interview.profile_id)
   if (!profile) throw new HttpError(404, 'profile not found')
   if (interview.kind === 'coaching') {
-    const weaknesses = await db.listWeaknesses(profile.id)
+    const [weaknesses, userModel] = await Promise.all([
+      db.listWeaknesses(profile.id),
+      db.getUserModel(profile.id),
+    ])
     const target = weaknessId
       ? await db.getWeakness(weaknessId)
       : weaknesses.find((w) => w.status !== 'resolved')
     if (!target) throw new HttpError(400, 'no open weakness to coach on')
     const body = await db.activePromptBody('coaching.system')
-    return renderCoachingSystem(body, profile, target, interview.mode)
+    return renderCoachingSystem(body, profile, target, interview.mode, userModel?.summary ?? null)
   }
   const pack = profile.skill_pack ? await db.resolvePublishedPack(profile.skill_pack) : null
   const body = await db.activePromptBody('interview.system')
-  const [weaknesses, claims] = await Promise.all([db.listWeaknesses(profile.id), db.listClaims(profile.id)])
-  return renderInterviewSystem(body, profile, pack, weaknesses, interview.mode, claims)
+  const [weaknesses, claims, userModel] = await Promise.all([
+    db.listWeaknesses(profile.id),
+    db.listClaims(profile.id),
+    db.getUserModel(profile.id),
+  ])
+  return renderInterviewSystem(
+    body,
+    profile,
+    pack,
+    weaknesses,
+    interview.mode,
+    claims,
+    userModel?.summary ?? null,
+  )
 }
 
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '').trim()
+
+/**
+ * Re-distill a profile's "what we know about you" model after an interview (D2 / Phase 4).
+ * Reads the prior model + recent events + the fresh report, asks the model for an updated body,
+ * and stores it (as an LLM distillation → `edited: false`, folding in any earlier user correction
+ * since the prior body is fed back in). Capped small; the caller treats failure as non-fatal.
+ */
+async function distillUserModel(
+  user: db.User,
+  call: ResolvedCall,
+  profile: db.Profile,
+  report: db.InterviewReport,
+): Promise<void> {
+  const [prior, events] = await Promise.all([db.getUserModel(profile.id), db.listEvents(profile.id, 40)])
+  const body = await db.activePromptBody('personalization.distill')
+  const content = renderDistill(body, profile, prior?.summary ?? null, events, report)
+  const summary = await runModel(
+    user,
+    call,
+    'You maintain a concise learner profile and respond with only the updated profile text.',
+    [{ role: 'user', content }],
+    700,
+  )
+  const trimmed = summary.trim()
+  if (trimmed) await db.setUserModel(profile.id, trimmed, false)
+}
 
 api.post('/interviews', async (c) => {
   const { user, call } = await requireCall(c, 'interview')
@@ -799,6 +850,7 @@ api.post('/interviews', async (c) => {
   const profile = await ownProfile(user.id, body.profile_id)
 
   const interview = await db.createInterview(profile.id, body.mode, body.kind)
+  await db.recordEvent(profile.id, 'interview_started', `${body.kind} · ${body.mode}`, interview.id)
   const system = await systemFor(interview, body.weakness_id)
   const messages: ChatMessage[] = [{ role: 'user', content: FIRST_MESSAGE_TRIGGER }]
 
@@ -836,7 +888,9 @@ api.post('/interviews/:id/messages', async (c) => {
   const interview = await ownInterview(user.id, id)
   if (interview.status !== 'active') throw new HttpError(409, 'interview already finished')
 
-  const { content } = await parseBody(c, messageSchema)
+  const { content, preference } = await parseBody(c, messageSchema)
+  // One-tap steering chip (Phase 4): log the preference so the user-model distiller learns it.
+  if (preference) await db.recordEvent(interview.profile_id, 'preference', preference, interview.id)
 
   const transcript = [...interview.transcript, { role: 'user', content } as const]
   const system = await systemFor(interview)
@@ -898,6 +952,17 @@ api.post('/interviews/:id/finish', async (c) => {
   for (const w of report.weaknesses) await db.addWeakness(profile.id, w, id)
   // Evidence-gating (R23): flip claimed skills to demonstrated/weak based on shown evidence.
   if (Array.isArray(report.skill_evidence)) await db.applySkillEvidence(profile.id, id, report.skill_evidence)
+  await db.recordEvent(
+    profile.id,
+    'interview_finished',
+    `score ${report.overall_score}/100 · ${report.level_estimate}`,
+    id,
+  )
+  // Personalization (D2): re-distill the user model from the prior model + recent events + this
+  // result, so the next interview "knows" the candidate. Best-effort — never fail finishing on it.
+  await distillUserModel(user, call, profile, report).catch((err: unknown) =>
+    console.error(JSON.stringify({ level: 'warn', msg: 'distill failed', error: String(err) })),
+  )
   return c.json(report)
 })
 
@@ -961,4 +1026,40 @@ api.get('/progress', async (c) => {
   const interviews = (await db.listInterviewsForUser(user.id)).filter((i) => i.profile_id === profile.id)
   const weaknesses = await db.listWeaknesses(profile.id)
   return c.json(computeProgress(profile, interviews, weaknesses))
+})
+
+// ── personalization: "what we know about you" (D2 / D6 / Phase 4) ────
+
+/** The active profile's distilled user model + recent activity — read/correct/delete here (D6). */
+api.get('/me/model', async (c) => {
+  const user = await requireUser(c)
+  const profile = await db.activeProfile(user.id)
+  if (!profile) return c.json(null)
+  const [model, events] = await Promise.all([db.getUserModel(profile.id), db.listEvents(profile.id, 50)])
+  return c.json({
+    profile: { id: profile.id, role: profile.role, company: profile.company, level: profile.level },
+    summary: model?.summary ?? '',
+    edited: model?.edited ?? false,
+    updated_at: model?.updated_at ?? null,
+    events,
+  })
+})
+
+/** Correct the model by hand (D6). Marked `edited`; the next distillation folds the correction in. */
+api.put('/me/model', async (c) => {
+  const user = await requireUser(c)
+  const profile = await db.activeProfile(user.id)
+  if (!profile) throw new HttpError(404, 'no active profile')
+  const { summary } = await parseBody(c, userModelSchema)
+  await db.setUserModel(profile.id, summary, true)
+  return c.json({ ok: true })
+})
+
+/** Forget what we know (D6). */
+api.delete('/me/model', async (c) => {
+  const user = await requireUser(c)
+  const profile = await db.activeProfile(user.id)
+  if (!profile) throw new HttpError(404, 'no active profile')
+  await db.clearUserModel(profile.id)
+  return c.json({ ok: true })
 })

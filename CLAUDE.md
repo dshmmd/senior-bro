@@ -19,8 +19,11 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > nav) + R24 (multi-profile) + R22 (tiered target) + **R23 (evidence-gated knowledge)** ✅ —
 > **Phase 17 COMPLETE.** **Phase 15 ✅ shipped** (dynamic company packs in the DB — generate-on-miss +
 > cache/reuse + Anthropic web-search + admin review queue; the 4 `skills/*.md` are now just seeds).
-> **All owner-directed phases (11–17) are done.** Next work is owner's call — see ROADMAP Phases 4/5/7
-> (personalization, resume/opportunity pipeline, learn-while-interviewing) or new owner direction.
+> **All owner-directed phases (11–17) are done.** **Phase 4 (personalization) core ✅ shipped 2026-06-27**
+> (event log + LLM-distilled per-profile "user model" injected into interviews + one-tap steering chips +
+> "what we know about you" page; capability tiers D3 deferred). Next work is owner's call — see ROADMAP
+> Phases 5/7 (resume/opportunity pipeline, learn-while-interviewing), finish Phase 4 (D3 capability tiers),
+> or new owner direction.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -148,13 +151,15 @@ senior-bro (npm workspace monorepo)
 ├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/schema.ts     Drizzle table definitions (13 tables, FKs+indexes); migrations in server/drizzle/
+│   ├── src/schema.ts     Drizzle table definitions (15 tables, FKs+indexes); migrations in server/drizzle/
 │   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
 │   │                     sessions/magic_links + per-user config + isolation + models + usage_events
 │   │                     + plans/credit (users.plan, token_quota) + invite_codes (D11)
 │   │                     + versioned prompts (activePromptBody / createPromptVersion, D12)
 │   │                     + company_packs (generate-on-miss cache, packSlug/createPack, D10)
 │   │                     + skill_claims (evidence-gated skills: seedClaims/applySkillEvidence, R23)
+│   │                     + user_events/user_models (personalization: recordEvent/listEvents/
+│   │                       getUserModel/setUserModel/clearUserModel, D2 · Phase 4)
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
@@ -163,15 +168,17 @@ senior-bro (npm workspace monorepo)
 │   ├── src/http.ts       shared HttpError
 │   ├── src/providers.ts  LLM abstraction: anthropic | openai | claude-cli | codex-cli | mock
 │   │                     (chat() returns text + token usage; ChatOptions.webSearch → Anthropic web_search, D16)
-│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack) + guardrail frame
-│   │                     + code-level claims/evidence framing (R23) + render*() (D12/D13)
+│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack, personalization.distill)
+│   │                     + guardrail frame + code-level claims/evidence + user-model blocks (R23/D2) + render*()
 │   ├── src/skills.ts     loadSeedPacks(): reads skills/*.md — SEED ONLY (runtime packs live in company_packs, D10)
-│   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode); /packs/ensure generate-on-miss (D10)
+│   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode); /packs/ensure generate-on-miss (D10);
+│                         /me/model read/correct/delete + post-interview distillUserModel() (D2 · Phase 4)
 ├── web/      React + Vite SPA
 │   ├── src/voice.ts      Web Speech API wrapper (STT + TTS)
 │   ├── src/api.ts        typed client for server API (cookie-authed)
 │   └── src/pages/        Login(hosted) → Profile → Calibration(free level-check) → Plan(hosted gate) →
-│                         Setup → Interview → Report → Dashboard; Plan = plans/mock-checkout/invite redeem;
+│                         Setup → Interview(+steering chips) → Report → Dashboard; Memory("what we know
+│                         about you", topbar 🧠 you, D2/D6); Plan = plans/mock-checkout/invite redeem;
 │                         Admin(hosted, role=admin): model/key mgmt, user quotas, usage, invite codes
 ├── skills/   SEED company packs (markdown + frontmatter) — imported into company_packs on boot (D10)
 └── memory/   milestone log (INDEX.md + one file per milestone)

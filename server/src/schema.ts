@@ -162,6 +162,40 @@ export const skillClaims = pgTable(
   (t) => [uniqueIndex('skill_claims_profile_skill_idx').on(t.profileId, t.skill)],
 )
 
+// Personalization engine (D2 / Phase 4). Per-profile, because the interviewer prompt, weaknesses
+// and skill claims are all per-profile — a learner's model for a "Senior Backend @ Stripe" target
+// differs from a "PM" one. `user_events` is the append-only activity log the distiller reads;
+// `user_models` is the single LLM-distilled (or user-corrected) document injected into prompts so
+// the coach "knows the candidate" (D2), and which the user can read/correct/delete (D6).
+export const userEvents = pgTable(
+  'user_events',
+  {
+    id: serial('id').primaryKey(),
+    profileId: integer('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    // e.g. 'profile_created' | 'calibration' | 'interview_started' | 'interview_finished' | 'preference'.
+    kind: text('kind').notNull(),
+    detail: text('detail').notNull().default(''),
+    // Optional link to the interview the event happened in (preferences, lifecycle); nulls out if dropped.
+    interviewId: integer('interview_id').references(() => interviews.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('user_events_profile_id_idx').on(t.profileId)],
+)
+
+export const userModels = pgTable('user_models', {
+  // One model per profile → profile id is the primary key (1:1).
+  profileId: integer('profile_id')
+    .primaryKey()
+    .references(() => profiles.id, { onDelete: 'cascade' }),
+  summary: text('summary').notNull().default(''),
+  // True once the user hand-edits their model (vs. an LLM distillation); reset on the next distill,
+  // which merges the correction in (the prior body is fed back to the distiller).
+  edited: boolean('edited').notNull().default(false),
+  updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
+})
+
 export const models = pgTable('models', {
   id: serial('id').primaryKey(),
   label: text('label').notNull(),
