@@ -23,6 +23,7 @@
     "format:check": "prettier --check .",
     "start": "node server/dist/index.js",
     "smoke": "node scripts/smoke.mjs",
+    "test:guardrail": "node --test 'server/test/*.test.mjs'",
     "e2e": "node e2e/prepare.mjs && playwright test"
   },
   "devDependencies": {

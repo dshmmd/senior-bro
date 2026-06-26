@@ -207,6 +207,26 @@ export interface InviteCode {
   created_at: string
 }
 
+export interface PromptCatalogEntry {
+  key: string
+  label: string
+  description: string
+  placeholders: string[]
+  guardrailed: boolean
+  active_version: number | null
+  version_count: number
+}
+
+export interface PromptVersion {
+  id: number
+  prompt_key: string
+  version: number
+  body: string
+  author: string
+  active: boolean
+  created_at: string
+}
+
 export interface AdminUserRow {
   id: number
   email: string | null
@@ -308,4 +328,10 @@ export const api = {
     post<InviteCode>('/admin/invites', m),
   adminRevokeInvite: (code: string) =>
     post<{ ok: boolean }>(`/admin/invites/${encodeURIComponent(code)}/revoke`, {}),
+  adminListPrompts: () => request<PromptCatalogEntry[]>('/admin/prompts'),
+  adminPromptVersions: (key: string) => request<PromptVersion[]>(`/admin/prompts/${encodeURIComponent(key)}`),
+  adminSavePrompt: (key: string, body: string) =>
+    post<PromptVersion>(`/admin/prompts/${encodeURIComponent(key)}`, { body }),
+  adminActivatePrompt: (key: string, version: number) =>
+    post<{ ok: boolean }>(`/admin/prompts/${encodeURIComponent(key)}/activate`, { version }),
 }

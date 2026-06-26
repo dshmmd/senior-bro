@@ -11,12 +11,13 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > below are superseded — durable Postgres store on Docker (**D9 ✅ Phase 11 shipped** —
 > `node:sqlite` retired), dynamic company-pack generation (D10, supersedes "one company =
 > one file"), admin-managed versioned prompts (D12, prompts leave `prompts.ts`). Read
-> ROADMAP Phases 11–16 before new work. **Phases 12 & 13 ✅ shipped** (12: resumable interviews +
+> ROADMAP Phases 11–16 before new work. **Phases 12, 13 & 14 ✅ shipped** (12: resumable interviews +
 > returning-user "welcome back" + DB-level FKs/indexes; 13: plans/gating + free level-check +
-> mocked checkout + invite-code credit). **Phase 16 voice** (R20) shipped (editable transcript;
-> native audio deferred). **Phase 17 partial:** R21 (Back nav) + R24 (multi-profile) ✅; **remaining
-> R22 (fuzzy/tiered target) + R23 (evidence-gated knowledge)**. **Next up = Phase 14 (versioned
-> prompts + guardrails), or finish Phase 17 R22/R23.**
+> mocked checkout + invite-code credit; **14: admin-managed versioned prompts in the DB + fixed
+> guardrail frame + red-team CI test — prompts have now left `prompts.ts` constants**). **Phase 16
+> voice** (R20) shipped (editable transcript; native audio deferred). **Phase 17 partial:** R21 (Back
+> nav) + R24 (multi-profile) ✅; **remaining R22 (fuzzy/tiered target) + R23 (evidence-gated
+> knowledge)**. **Next up = Phase 15 (dynamic company packs), or finish Phase 17 R22/R23.**
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -57,10 +58,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
    **Drizzle ORM** (`server/src/schema.ts` + generated `server/drizzle/` migrations); db
    queries are async. Deps that buy real robustness are fine (D9 retired the zero-deps rule
    for the server); still avoid gratuitous ones. The web app keeps its tiny-bundle discipline (D1).
-5. User-facing strings live in the React components. ~~Prompts live in `prompts.ts`~~
-   **Being superseded by D12:** prompts move into the DB (admin-editable, versioned); code
-   ships the seed/default version. Until Phase 14 lands, `server/src/prompts.ts` is still
-   the source of truth.
+5. User-facing strings live in the React components. **Prompts now live in the DB** (D12 /
+   Phase 14): `server/src/prompts.ts` ships the **seed bodies** (`PROMPT_SEEDS`, version 1) +
+   the fixed guardrail frame + pure `render*` template fillers; the **active body** comes from
+   the `prompts` table via `db.activePromptBody(key)` and is admin-editable/versioned. To change
+   a prompt at runtime, edit it in the admin UI (a new version), don't touch the constant — the
+   seed is only the default/fallback. Keep `{{PLACEHOLDER}}` tokens intact when editing bodies.
 6. ~~Company knowledge = one `skills/*.md` file per company~~ **SUPERSEDED by D10:** company
    packs are **generated on demand** (web search → draft → stored in DB → admin review) and
    cached/reused. The 4 `skills/*.md` are the initial seed. Never hardcode company specifics
@@ -95,13 +98,17 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   interview and resume it later exactly where it stopped. (D14 · Phase 12 ✅ 2026-06-25)
 - [ ] R16: **Durable per-user datastore for the long term** — PostgreSQL in Docker, typed
   migrations, strict per-user partitioning. (D9 · Phase 11)
-- [ ] R17: **Admin-managed, versioned system prompts** — edit/improve in the admin UI with
-  version history + rollback; guardrail frame stays fixed. (D12 · Phase 14)
+- [x] R17: **Admin-managed, versioned system prompts** — edit/improve in the admin UI with
+  version history + rollback; guardrail frame stays fixed. Shipped 2026-06-26 (`prompts` table,
+  migration 0004; `db.activePromptBody`; `/api/admin/prompts*`; `Admin.tsx` "System prompts").
+  (D12 · Phase 14)
 - [x] R18: **Plans & gating** — free short level-check, then choose a plan: host-models (paid,
   mocked payment) / BYO key (free) / local CLI (free); **admin-minted invite codes** carry
   credit. (D11 · Phase 13 ✅ 2026-06-25)
-- [ ] R19: **Prompt guardrails** — users can't steer the model off the interview task
-  (prompt-injection / jailbreak resistance). (D13 · Phase 14)
+- [x] R19: **Prompt guardrails** — users can't steer the model off the interview task
+  (prompt-injection / jailbreak resistance). Shipped 2026-06-26: fixed `wrapGuardrail` frame
+  (4 immutable rules) around interview+coaching prompts; candidate text treated as data;
+  single-pass template fill; red-team CI test (`server/test/guardrail.test.mjs`). (D13 · Phase 14)
 - [x] R20: **Accent-aware voice** — editable transcript the user confirms before sending (no more
   auto-sent raw STT). Shipped 2026-06-25 (voice dictates into an editable box; user reviews/edits,
   then sends). Native audio-in (model hears the voice) **deferred by owner 2026-06-25** —
@@ -129,10 +136,11 @@ senior-bro (npm workspace monorepo)
 ├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/schema.ts     Drizzle table definitions (10 tables, FKs+indexes); migrations in server/drizzle/
+│   ├── src/schema.ts     Drizzle table definitions (11 tables, FKs+indexes); migrations in server/drizzle/
 │   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
 │   │                     sessions/magic_links + per-user config + isolation + models + usage_events
 │   │                     + plans/credit (users.plan, token_quota) + invite_codes (D11)
+│   │                     + versioned prompts (activePromptBody / createPromptVersion, D12)
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
@@ -141,7 +149,7 @@ senior-bro (npm workspace monorepo)
 │   ├── src/http.ts       shared HttpError
 │   ├── src/providers.ts  LLM abstraction: anthropic | openai | claude-cli | codex-cli | mock
 │   │                     (chat() returns text + token usage for metering)
-│   ├── src/prompts.ts    ALL system prompts & evaluation rubrics
+│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS) + fixed guardrail frame + render*() template fillers (D12/D13)
 │   ├── src/skills.ts     loads skills/*.md company packs
 │   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode)
 ├── web/      React + Vite SPA
@@ -181,7 +189,8 @@ make db-up             # start Postgres in Docker (required before dev/start/che
 make dev               # Postgres + server :4747 + vite :5173 with proxy
 npm run build          # build web → web/dist, typecheck server
 npm run typecheck      # tsc --noEmit in both workspaces
-make check             # full gate: lint + typecheck + build + smoke (boots Postgres)
+make check             # full gate: lint + typecheck + build + test + smoke (boots Postgres)
+make test              # red-team guardrail unit tests (node --test; needs a prior build)
 make start             # production: serve built app on http://localhost:4747
 make db-generate       # generate a Drizzle migration after editing server/src/schema.ts
 node scripts/import-sqlite.mjs  # one-time: legacy ~/.senior-bro/data.db → Postgres

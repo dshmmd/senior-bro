@@ -52,3 +52,8 @@ One entry per completed milestone. Read this before working on the repo.
   `users.active_profile_id` (migration 0003, `AnyPgColumn` to break the circular-FK type cycle);
   `/api/profiles` + `/select`; active-profile resolution; Dashboard switcher. Includes the
   feat/test→main fast-forward reconciliation note. R24 done. Next = **Phase 14, or Phase 17 R21–R23**.
+- [2026-06-26 — Phase 14: Versioned prompts + guardrails](2026-06-26-phase14-versioned-prompts-guardrails.md) —
+  prompts moved into the DB (`prompts` table, migration 0004), admin-editable + versioned with
+  rollback (`Admin.tsx` "System prompts", `/api/admin/prompts*`, `db.activePromptBody`); seed bodies
+  are `{{PLACEHOLDER}}` templates; fixed `wrapGuardrail` frame around interview/coaching (anti-jailbreak);
+  red-team CI test. R17 + R19 done. Next = **Phase 15 (dynamic company packs), or Phase 17 R22/R23**.

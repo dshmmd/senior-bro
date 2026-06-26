@@ -108,8 +108,8 @@ card — for testers, partners, and early users. See D11.
      Returning-user "welcome back", resume an interrupted interview, DB-level FKs/indexes.
   3. ~~**Phase 13 — Plans, gating & invite codes** (D11)~~ ✅ **shipped 2026-06-25.**
      Free level-check → plan gate; mocked checkout; admin-minted invite-code credit; per-call entitlement.
-  4. **Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13) ⬅ recommended next.
-  5. **Phase 15 — Dynamic company skill packs** (D10).
+  4. ~~**Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13)~~ ✅ **shipped 2026-06-26.**
+  5. **Phase 15 — Dynamic company skill packs** (D10) ⬅ recommended next.
   6. **Phase 16 — Accent-aware voice** (D15).
   > Rationale for ordering: 11 unblocks all storage; 12/13 make hosted usable + monetizable;
   > 14 hardens correctness/safety; 15/16 are high-value features that ride on the above.
@@ -298,15 +298,28 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
   `scripts/verify-ph13.mjs` (free check → 402 paywall → redeem → select model → metered interview).
 - **Gate: owner reviews before Phase 14 (admin-managed versioned prompts + guardrails).**
 
-### Phase 14 — Admin-managed versioned prompts + guardrails (D12, D13)
-- [ ] Move prompts from `server/src/prompts.ts` constants into a DB table:
-      `prompt_key` → many **versions** (body, author, created_at, active flag).
-- [ ] Admin UI: edit a prompt → saves a new version; diff vs. previous; set active; rollback.
-- [ ] Code ships the **seed/default version**; DB override wins when present.
-- [ ] **Guardrail frame**: a fixed, non-editable wrapper around every interview prompt that
-      pins the model to the interview task and treats candidate text as untrusted content
-      (resists "ignore previous instructions", topic/role changes). Admin bodies live inside it.
-- [ ] Red-team test set (jailbreak attempts) run against the guardrail in CI.
+### Phase 14 — Admin-managed versioned prompts + guardrails (D12, D13) ✅ (2026-06-26)
+- [x] Moved prompts from `server/src/prompts.ts` constants into a DB table (`prompts`,
+      migration `0004`): `prompt_key` → many **versions** (body, author, active flag). The
+      bodies are now **templates** with `{{PLACEHOLDER}}` tokens; code injects the dynamic,
+      non-editable data (profile, skill pack, weaknesses, reply-style, transcript).
+- [x] Admin UI (`Admin.tsx` "System prompts"): pick a prompt → edit body → **Save as new
+      version** (auto-activates); **version history** with one-click **roll back to vN**.
+      `GET/POST /api/admin/prompts[/:key][/activate]`. Placeholder hints shown in the editor.
+- [x] Code ships the **seed/default version** (`PROMPT_SEEDS`, author 'seed', v1); seeded on
+      boot for any missing key. `db.activePromptBody(key)` returns the active body (DB wins,
+      seed is the defensive fallback so a model call never runs prompt-less).
+- [x] **Guardrail frame** (D13): a fixed, non-editable wrapper (`wrapGuardrail`) around the
+      interview + coaching system prompts — four immutable governance rules that pin the model
+      to the interview task and treat candidate text as data, never instructions (resists
+      "ignore previous instructions", role swaps, prompt-leak, topic changes). Admin bodies sit
+      *inside* the frame; calibration/grade/evaluation seeds also carry an untrusted-input note.
+      Template fill is single-pass (candidate-authored profile text can't inject placeholders).
+- [x] Red-team test set (`server/test/guardrail.test.mjs`, `npm run test:guardrail`) — jailbreak
+      strings proven structurally enclosed by the frame; wired into `make check` + CI.
+- **Gate: owner reviews before Phase 15 (dynamic company packs).**
+- Note: tests are *structural* (no live model) — they guard the construction seam an attacker
+  targets; live-model red-teaming needs a real provider and is out of CI scope.
 
 ### Phase 15 — Dynamic company skill packs (D10)
 - [ ] On unknown company: model **web-searches** company + domain + role interview process

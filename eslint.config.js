@@ -21,6 +21,7 @@ export default tseslint.config(
             'e2e/*.ts',
             'e2e/*.mjs',
             'server/drizzle.config.ts',
+            'server/test/*.mjs',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

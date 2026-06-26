@@ -14,11 +14,12 @@ import { getSkillPack, loadSkillPacks } from './skills.js'
 import { computeProgress } from './progress.js'
 import {
   FIRST_MESSAGE_TRIGGER,
-  calibrationGeneratePrompt,
-  calibrationGradePrompt,
-  coachingSystemPrompt,
-  evaluationPrompt,
-  interviewSystemPrompt,
+  PROMPT_SEEDS,
+  renderCalibrationGenerate,
+  renderCalibrationGrade,
+  renderCoachingSystem,
+  renderEvaluation,
+  renderInterviewSystem,
 } from './prompts.js'
 
 export const api = new Hono()
@@ -246,6 +247,17 @@ const inviteCreateSchema = z.object({
   note: z.string().trim().max(200).optional(),
   expires_in_days: z.number().int().min(1).max(365).nullable().default(null),
 })
+
+const promptKeys = PROMPT_SEEDS.map((s) => s.key) as [string, ...string[]]
+const promptVersionSchema = z.object({ body: z.string().trim().min(1).max(20000) })
+const promptActivateSchema = z.object({ version: z.number().int().positive() })
+
+/** Validate the `:key` path param against the known prompt catalogue (404 if unknown). */
+function promptKeyOf(c: Context): (typeof promptKeys)[number] {
+  const key = c.req.param('key') ?? ''
+  if (!(promptKeys as readonly string[]).includes(key)) throw new HttpError(404, 'unknown prompt key')
+  return key
+}
 
 // ── config ──────────────────────────────────────────────────────────
 
@@ -484,6 +496,54 @@ api.post('/admin/invites/:code/revoke', async (c) => {
   return c.json({ ok: true })
 })
 
+// ── admin: versioned system prompts (D12 — edit/version/rollback) ────
+
+/** Prompt catalogue: each key with its metadata + active version + total versions. */
+api.get('/admin/prompts', async (c) => {
+  await requireAdmin(c)
+  const rows = await Promise.all(
+    PROMPT_SEEDS.map(async (s) => {
+      const versions = await db.listPromptVersions(s.key)
+      return {
+        key: s.key,
+        label: s.label,
+        description: s.description,
+        placeholders: s.placeholders,
+        guardrailed: s.guardrailed,
+        active_version: versions.find((v) => v.active)?.version ?? null,
+        version_count: versions.length,
+      }
+    }),
+  )
+  return c.json(rows)
+})
+
+/** All saved versions of one prompt key (newest first), for the editor + history. */
+api.get('/admin/prompts/:key', async (c) => {
+  await requireAdmin(c)
+  const key = promptKeyOf(c)
+  return c.json(await db.listPromptVersions(key))
+})
+
+/** Save an edited body as a new active version. */
+api.post('/admin/prompts/:key', async (c) => {
+  const admin = await requireAdmin(c)
+  const key = promptKeyOf(c)
+  const { body } = await parseBody(c, promptVersionSchema)
+  const created = await db.createPromptVersion(key, body, admin.email ?? `user#${admin.id}`)
+  return c.json(created)
+})
+
+/** Roll back / forward by re-activating an existing version. */
+api.post('/admin/prompts/:key/activate', async (c) => {
+  await requireAdmin(c)
+  const key = promptKeyOf(c)
+  const { version } = await parseBody(c, promptActivateSchema)
+  const ok = await db.activatePromptVersion(key, version)
+  if (!ok) throw new HttpError(404, 'no such prompt version')
+  return c.json({ ok: true })
+})
+
 // ── skills ──────────────────────────────────────────────────────────
 
 api.get('/skills', (c) =>
@@ -535,8 +595,9 @@ api.post('/calibration/start', async (c) => {
   const { user, call } = await requireCall(c, 'calibration')
   const { profile_id } = await parseBody(c, calibrationStartSchema)
   const profile = await ownProfile(user.id, profile_id)
+  const body = await db.activePromptBody('calibration.generate')
   const raw = await runModel(user, call, 'You generate interview calibration questions as JSON.', [
-    { role: 'user', content: calibrationGeneratePrompt(profile) },
+    { role: 'user', content: renderCalibrationGenerate(body, profile) },
   ])
   const questions = extractJson<string[]>(raw)
   const id = await db.createCalibration(profile.id, questions)
@@ -549,8 +610,12 @@ api.post('/calibration/submit', async (c) => {
   const calibration = await db.getCalibration(calibration_id)
   if (!calibration) throw new HttpError(404, 'calibration not found')
   const profile = await ownProfile(user.id, calibration.profile_id)
+  const body = await db.activePromptBody('calibration.grade')
   const raw = await runModel(user, call, 'You grade interview calibration quizzes as JSON.', [
-    { role: 'user', content: calibrationGradePrompt(profile, calibration.questions as string[], answers) },
+    {
+      role: 'user',
+      content: renderCalibrationGrade(body, profile, calibration.questions as string[], answers),
+    },
   ])
   const result = extractJson<{ level: string; summary: string }>(raw)
   await db.saveCalibrationResult(calibration_id, result)
@@ -569,10 +634,12 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
       ? await db.getWeakness(weaknessId)
       : weaknesses.find((w) => w.status !== 'resolved')
     if (!target) throw new HttpError(400, 'no open weakness to coach on')
-    return coachingSystemPrompt(profile, target, interview.mode)
+    const body = await db.activePromptBody('coaching.system')
+    return renderCoachingSystem(body, profile, target, interview.mode)
   }
   const pack = profile.skill_pack ? getSkillPack(profile.skill_pack) : null
-  return interviewSystemPrompt(profile, pack, await db.listWeaknesses(profile.id), interview.mode)
+  const body = await db.activePromptBody('interview.system')
+  return renderInterviewSystem(body, profile, pack, await db.listWeaknesses(profile.id), interview.mode)
 }
 
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '').trim()
@@ -666,11 +733,12 @@ api.post('/interviews/:id/finish', async (c) => {
 
   const profile = await ownProfile(user.id, interview.profile_id)
 
+  const evalBody = await db.activePromptBody('evaluation')
   const raw = await runModel(
     user,
     call,
     'You evaluate mock interviews and respond with strict JSON.',
-    [{ role: 'user', content: evaluationPrompt(profile, interview.transcript) }],
+    [{ role: 'user', content: renderEvaluation(evalBody, profile, interview.transcript) }],
     8192,
   )
   const report = extractJson<db.InterviewReport>(raw)

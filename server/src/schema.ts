@@ -168,6 +168,26 @@ export const usageEvents = pgTable(
   (t) => [index('usage_events_user_id_idx').on(t.userId)],
 )
 
+// Admin-managed, versioned system prompts (D12 / Phase 14). Each `promptKey`
+// (e.g. 'interview.system') has many rows — one per saved version. Exactly one row
+// per key is `active`; rendering reads the active body. Code ships a seed version
+// (author 'seed', version 1); admins add versions in the UI and can roll back by
+// re-activating an older one. The fixed guardrail frame lives in code, NOT here —
+// admins edit only the body that sits *inside* the frame (D13).
+export const prompts = pgTable(
+  'prompts',
+  {
+    id: serial('id').primaryKey(),
+    promptKey: text('prompt_key').notNull(),
+    version: integer('version').notNull(),
+    body: text('body').notNull(),
+    author: text('author').notNull().default('seed'),
+    active: boolean('active').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [index('prompts_key_idx').on(table.promptKey)],
+)
+
 // Admin-minted invite codes (D11 / Phase 13). Each carries a token-denominated credit
 // (Q3); redeeming adds it to the redeemer's quota and upgrades them to the 'host' plan.
 // Single-use: `redeemedBy`/`redeemedAt` are set once; `revoked` blocks an unused code.
