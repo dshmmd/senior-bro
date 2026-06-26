@@ -9,8 +9,14 @@ import { HttpError } from './http.js'
 import { isHosted, MODE } from './mode.js'
 import { revealLinks, sendMagicLink } from './mailer.js'
 import * as db from './db.js'
-import { chat, extractJson, validateKey, type ChatMessage, type OnDelta } from './providers.js'
-import { getSkillPack, loadSkillPacks } from './skills.js'
+import {
+  chat,
+  extractJson,
+  validateKey,
+  type ChatMessage,
+  type ChatOptions,
+  type OnDelta,
+} from './providers.js'
 import { computeProgress } from './progress.js'
 import {
   FIRST_MESSAGE_TRIGGER,
@@ -18,6 +24,7 @@ import {
   renderCalibrationGenerate,
   renderCalibrationGrade,
   renderCoachingSystem,
+  renderCompanyPack,
   renderEvaluation,
   renderInterviewSystem,
 } from './prompts.js'
@@ -31,7 +38,7 @@ const FREE_INTRO_TOKEN_BUDGET = 30_000
 const CREDIT_PACKS = [100_000, 500_000, 1_000_000] as const
 
 /** What a model call is for — gates which plans may make it (D11). */
-type CallKind = 'calibration' | 'interview'
+type CallKind = 'calibration' | 'interview' | 'pack'
 
 /**
  * A resolved model call: which provider/key to use, plus the metering metadata
@@ -84,7 +91,8 @@ async function enforceEntitlement(user: db.User, call: ResolvedCall, kind: CallK
   if (!isHosted) return
   if (call.modelId === null) return
   if (call.freeIntro) {
-    if (kind !== 'calibration')
+    // Free intro covers onboarding (the level quiz + company-pack research), not full interviews.
+    if (kind === 'interview')
       throw new HttpError(402, 'Pick a plan to start interviews — the free check covers the level quiz only')
     if ((await db.tokensUsed(user.id)) >= FREE_INTRO_TOKEN_BUDGET)
       throw new HttpError(402, 'Your free level-check is used up — choose a plan to keep going')
@@ -110,8 +118,22 @@ async function runModel(
   messages: ChatMessage[],
   maxTokens = 4096,
   onDelta?: OnDelta,
+  options?: ChatOptions,
 ): Promise<string> {
-  const { text, usage } = await chat(call.cfg, system, messages, maxTokens, onDelta)
+  return (await runModelFull(user, call, system, messages, maxTokens, onDelta, options)).text
+}
+
+/** Like `runModel` but also returns the raw `ChatResult` (e.g. the `searched` provenance flag). */
+async function runModelFull(
+  user: db.User,
+  call: ResolvedCall,
+  system: string,
+  messages: ChatMessage[],
+  maxTokens = 4096,
+  onDelta?: OnDelta,
+  options?: ChatOptions,
+): Promise<{ text: string; searched: boolean }> {
+  const { text, usage, searched } = await chat(call.cfg, system, messages, maxTokens, onDelta, options)
   const costUsd =
     (usage.inputTokens / 1_000_000) * call.priceIn + (usage.outputTokens / 1_000_000) * call.priceOut
   await db.recordUsage({
@@ -123,7 +145,7 @@ async function runModel(
     outputTokens: usage.outputTokens,
     costUsd,
   })
-  return text
+  return { text, searched: searched ?? false }
 }
 
 /** Throw 404 unless `profileId` belongs to `userId` (cross-user isolation guard). */
@@ -251,6 +273,18 @@ const inviteCreateSchema = z.object({
 const promptKeys = PROMPT_SEEDS.map((s) => s.key) as [string, ...string[]]
 const promptVersionSchema = z.object({ body: z.string().trim().min(1).max(20000) })
 const promptActivateSchema = z.object({ version: z.number().int().positive() })
+
+const packEnsureSchema = z.object({
+  company: z.string().trim().min(1).max(120),
+  role: z.string().trim().min(1).max(120),
+})
+const packUpdateSchema = z.object({
+  company: z.string().trim().min(1).max(120).optional(),
+  summary: z.string().trim().max(500).optional(),
+  body: z.string().trim().min(1).max(20000).optional(),
+  roles: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+  status: z.enum(['published', 'draft', 'archived']).optional(),
+})
 
 /** Validate the `:key` path param against the known prompt catalogue (404 if unknown). */
 function promptKeyOf(c: Context): (typeof promptKeys)[number] {
@@ -544,11 +578,115 @@ api.post('/admin/prompts/:key/activate', async (c) => {
   return c.json({ ok: true })
 })
 
-// ── skills ──────────────────────────────────────────────────────────
+// ── admin: company packs review queue (D10 — edit/publish/regenerate) ─
 
-api.get('/skills', (c) =>
-  c.json(loadSkillPacks().map(({ id, company, roles, summary }) => ({ id, company, roles, summary }))),
-)
+api.get('/admin/packs', async (c) => {
+  await requireAdmin(c)
+  return c.json(await db.listAllPacks())
+})
+
+api.patch('/admin/packs/:id', async (c) => {
+  await requireAdmin(c)
+  const patch = await parseBody(c, packUpdateSchema)
+  const updated = await db.updatePack(Number(c.req.param('id')), patch)
+  if (!updated) throw new HttpError(404, 'pack not found')
+  return c.json(updated)
+})
+
+/** Re-draft a pack's body from scratch (e.g. when it's stale), keeping its slug/cache key. */
+api.post('/admin/packs/:id/regenerate', async (c) => {
+  await requireAdmin(c)
+  const { user, call } = await requireCall(c, 'pack')
+  const pack = await db.getPack(Number(c.req.param('id')))
+  if (!pack) throw new HttpError(404, 'pack not found')
+  const role = pack.roles[0] ?? 'Engineer'
+  const promptBody = await db.activePromptBody('company.pack')
+  const content = renderCompanyPack(promptBody, pack.company, role)
+  const webSearch = call.cfg.provider === 'anthropic'
+  const { text, searched } = await runModelFull(
+    user,
+    call,
+    'You research companies and respond with strict JSON.',
+    [{ role: 'user', content }],
+    1500,
+    undefined,
+    { webSearch },
+  )
+  const draft = extractJson<{ company?: string; roles?: string[]; summary?: string; body?: string }>(text)
+  if (!draft.body?.trim()) throw new HttpError(502, 'pack generation returned no playbook — try again')
+  const updated = await db.updatePack(pack.id, {
+    summary: draft.summary?.trim() ?? pack.summary,
+    body: draft.body.trim(),
+    roles: Array.isArray(draft.roles) && draft.roles.length ? draft.roles : pack.roles,
+    model: call.cfg.model,
+    searched,
+  })
+  return c.json(updated)
+})
+
+api.delete('/admin/packs/:id', async (c) => {
+  await requireAdmin(c)
+  await db.deletePack(Number(c.req.param('id')))
+  return c.json({ ok: true })
+})
+
+// ── company packs (D10 / Phase 15) ──────────────────────────────────
+
+api.get('/skills', async (c) => {
+  const packs = await db.listPublishedPacks()
+  return c.json(
+    packs.map((p) => ({ id: String(p.id), company: p.company, roles: p.roles, summary: p.summary })),
+  )
+})
+
+/** Draft a company pack via the model (web-search-augmented on Anthropic), then cache it. */
+async function generatePack(
+  user: db.User,
+  call: ResolvedCall,
+  company: string,
+  role: string,
+): Promise<db.CompanyPack> {
+  const promptBody = await db.activePromptBody('company.pack')
+  const content = renderCompanyPack(promptBody, company, role)
+  const webSearch = call.cfg.provider === 'anthropic'
+  const { text, searched } = await runModelFull(
+    user,
+    call,
+    'You research companies and respond with strict JSON.',
+    [{ role: 'user', content }],
+    1500,
+    undefined,
+    { webSearch },
+  )
+  const draft = extractJson<{ company?: string; roles?: string[]; summary?: string; body?: string }>(text)
+  if (!draft.body?.trim()) throw new HttpError(502, 'pack generation returned no playbook — try again')
+  return db.createPack({
+    slug: db.packSlug(company),
+    company: draft.company?.trim() ?? company,
+    roles: Array.isArray(draft.roles) && draft.roles.length ? draft.roles : [role],
+    summary: draft.summary?.trim() ?? '',
+    body: draft.body.trim(),
+    status: 'published',
+    source: 'generated',
+    model: call.cfg.model,
+    searched,
+    createdBy: user.id,
+  })
+}
+
+/**
+ * Generate-on-miss (R14): return the published pack for `company`, drafting + caching one if we
+ * don't have it yet. Cached packs are reused across all users (the first namer pays the tokens).
+ */
+api.post('/packs/ensure', async (c) => {
+  const { user, call } = await requireCall(c, 'pack')
+  const { company, role } = await parseBody(c, packEnsureSchema)
+  const existing = await db.getPackBySlug(db.packSlug(company))
+  if (existing?.status === 'published')
+    return c.json({ pack_id: existing.id, company: existing.company, generated: false })
+  const pack = await generatePack(user, call, company, role)
+  return c.json({ pack_id: pack.id, company: pack.company, generated: true, searched: pack.searched })
+})
 
 // ── profile ─────────────────────────────────────────────────────────
 
@@ -637,7 +775,7 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
     const body = await db.activePromptBody('coaching.system')
     return renderCoachingSystem(body, profile, target, interview.mode)
   }
-  const pack = profile.skill_pack ? getSkillPack(profile.skill_pack) : null
+  const pack = profile.skill_pack ? await db.resolvePublishedPack(profile.skill_pack) : null
   const body = await db.activePromptBody('interview.system')
   return renderInterviewSystem(body, profile, pack, await db.listWeaknesses(profile.id), interview.mode)
 }

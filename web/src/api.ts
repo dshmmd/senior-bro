@@ -227,6 +227,22 @@ export interface PromptVersion {
   created_at: string
 }
 
+export interface CompanyPack {
+  id: number
+  slug: string
+  company: string
+  roles: string[]
+  summary: string
+  body: string
+  status: 'published' | 'draft' | 'archived'
+  source: 'seed' | 'generated'
+  model: string | null
+  searched: boolean
+  created_by: number | null
+  created_at: string
+  updated_at: string
+}
+
 export interface AdminUserRow {
   id: number
   email: string | null
@@ -251,6 +267,11 @@ export const api = {
   saveConfig: (provider: string, apiKey: string, model?: string) =>
     post<{ ok: boolean }>('/config', { provider, apiKey, model }),
   skills: () => request<SkillPackSummary[]>('/skills'),
+  ensurePack: (company: string, role: string) =>
+    post<{ pack_id: number; company: string; generated: boolean; searched?: boolean }>('/packs/ensure', {
+      company,
+      role,
+    }),
   getProfile: () => request<Profile | null>('/profile'),
   listProfiles: () => request<{ profiles: ProfileListItem[]; active_profile_id: number | null }>('/profiles'),
   selectProfile: (id: number) => post<{ ok: boolean }>(`/profiles/${id}/select`, {}),
@@ -334,4 +355,17 @@ export const api = {
     post<PromptVersion>(`/admin/prompts/${encodeURIComponent(key)}`, { body }),
   adminActivatePrompt: (key: string, version: number) =>
     post<{ ok: boolean }>(`/admin/prompts/${encodeURIComponent(key)}/activate`, { version }),
+  adminListPacks: () => request<CompanyPack[]>('/admin/packs'),
+  adminUpdatePack: (
+    id: number,
+    patch: Partial<{
+      company: string
+      summary: string
+      body: string
+      roles: string[]
+      status: 'published' | 'draft' | 'archived'
+    }>,
+  ) => request<CompanyPack>(`/admin/packs/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  adminRegeneratePack: (id: number) => post<CompanyPack>(`/admin/packs/${id}/regenerate`, {}),
+  adminDeletePack: (id: number) => request<{ ok: boolean }>(`/admin/packs/${id}`, { method: 'DELETE' }),
 }

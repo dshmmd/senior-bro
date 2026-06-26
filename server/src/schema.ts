@@ -188,6 +188,35 @@ export const prompts = pgTable(
   (table) => [index('prompts_key_idx').on(table.promptKey)],
 )
 
+// Dynamic company interview packs (D10 / Phase 15). Replaces the "one company = one
+// hand-written file" model: when a user names a company we don't have, the model drafts
+// a pack (web-search-augmented on capable providers) and we cache it here, reused across
+// all users. The 4 static `skills/*.md` are seeded in as `source: 'seed'`. `slug` is the
+// normalized company name (lowercased alnum) so "Stripe"/"stripe Inc" hit the same row.
+// Admins review/edit/publish/regenerate; `status` gates which packs onboarding offers.
+export const companyPacks = pgTable(
+  'company_packs',
+  {
+    id: serial('id').primaryKey(),
+    slug: text('slug').notNull().unique(),
+    company: text('company').notNull(),
+    roles: text('roles').notNull().default('[]'),
+    summary: text('summary').notNull().default(''),
+    body: text('body').notNull(),
+    // 'published' = usable in onboarding/interviews; 'draft' = admin-only; 'archived' = hidden.
+    status: text('status').notNull().default('published'),
+    // 'seed' = shipped markdown; 'generated' = model-drafted on demand.
+    source: text('source').notNull().default('generated'),
+    // Provenance for generated packs: which model drafted it + whether live search was used.
+    model: text('model'),
+    searched: boolean('searched').notNull().default(false),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
+  },
+  (table) => [index('company_packs_status_idx').on(table.status)],
+)
+
 // Admin-minted invite codes (D11 / Phase 13). Each carries a token-denominated credit
 // (Q3); redeeming adds it to the redeemer's quota and upgrades them to the 'host' plan.
 // Single-use: `redeemedBy`/`redeemedAt` are set once; `revoked` blocks an unused code.

@@ -13,6 +13,15 @@ export interface ChatMessage {
 
 export type OnDelta = (text: string) => void
 
+/**
+ * Optional model capabilities for a call. `webSearch` asks the provider to use its built-in
+ * web-search tool (D16) — honored on Anthropic, ignored elsewhere (the model then drafts from
+ * its own knowledge). Returned `searched` says whether live search actually ran.
+ */
+export interface ChatOptions {
+  webSearch?: boolean
+}
+
 /** Token counts for one model call — feeds usage metering & quotas. */
 export interface TokenUsage {
   inputTokens: number
@@ -22,6 +31,8 @@ export interface TokenUsage {
 export interface ChatResult {
   text: string
   usage: TokenUsage
+  /** True when a live web-search tool actually ran during the call (D16 provenance). */
+  searched?: boolean
 }
 
 /** Rough token estimate when a provider doesn't report usage (CLI/mock): ~4 chars/token. */
@@ -40,10 +51,11 @@ export async function chat(
   messages: ChatMessage[],
   maxTokens = 4096,
   onDelta?: OnDelta,
+  options?: ChatOptions,
 ): Promise<ChatResult> {
   switch (cfg.provider) {
     case 'anthropic':
-      return chatAnthropic(cfg, system, messages, maxTokens, onDelta)
+      return chatAnthropic(cfg, system, messages, maxTokens, onDelta, options)
     case 'openai':
       return chatOpenAI(cfg, system, messages, maxTokens, onDelta)
     case 'claude-cli':
@@ -61,16 +73,24 @@ async function chatAnthropic(
   messages: ChatMessage[],
   maxTokens: number,
   onDelta?: OnDelta,
+  options?: ChatOptions,
 ): Promise<ChatResult> {
   const client = new Anthropic({ apiKey: cfg.apiKey })
+  // D16: enable Anthropic's hosted web-search tool when the caller asks for it (pack research).
+  const tools = options?.webSearch
+    ? [{ type: 'web_search_20250305' as const, name: 'web_search' as const, max_uses: 5 }]
+    : undefined
   const stream = client.messages.stream({
     model: cfg.model,
     max_tokens: maxTokens,
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages,
+    ...(tools ? { tools } : {}),
   })
   if (onDelta) stream.on('text', onDelta)
   const final = await stream.finalMessage()
+  // Did the model actually invoke search? (provenance for the generated pack)
+  const searched = final.content.some((b) => b.type === 'server_tool_use')
   const text = final.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map((b) => b.text)
@@ -81,6 +101,7 @@ async function chatAnthropic(
       inputTokens: final.usage.input_tokens,
       outputTokens: final.usage.output_tokens,
     },
+    searched,
   }
 }
 
@@ -290,6 +311,17 @@ const MOCK_QUESTIONS = [
 ]
 
 function mockReply(system: string, messages: ChatMessage[]): string {
+  const firstUser = messages.find((m) => m.role === 'user')?.content ?? ''
+  if (firstUser.includes('interview playbook')) {
+    const company = /Company:\s*(.+)/.exec(firstUser)?.[1]?.trim() ?? 'the company'
+    const role = /target role:\s*(.+)/i.exec(firstUser)?.[1]?.trim() ?? 'Engineer'
+    return JSON.stringify({
+      company,
+      roles: [role],
+      summary: `${company} runs a structured, signal-driven interview loop.`,
+      body: `## ${company} — interview playbook\n\n${company} builds products at scale; this loop targets ${role}.\n\n**Process:** recruiter screen → technical screen → onsite (coding, system design, behavioral).\n\n**Signals:** problem-solving clarity, depth on stated technologies, ownership, and communication under follow-ups.\n\n**Question styles & examples:**\n- Coding: "Design a rate limiter."\n- System design: "How would you scale a notification service?"\n- Behavioral: "Tell me about a project you owned end to end."\n\n**Calibrate** difficulty to the candidate's assessed level; push one notch above on their strongest area.`,
+    })
+  }
   if (system.includes('calibration questions'))
     return JSON.stringify([
       'What does idempotency mean and why does it matter for APIs?',

@@ -1,5 +1,10 @@
 import type { Profile, Weakness, TranscriptEntry } from './db.js'
-import type { SkillPack } from './skills.js'
+
+/** Minimal shape the interview prompt needs from a company pack (DB row or seed). */
+export interface PackLike {
+  company: string
+  body: string
+}
 
 /**
  * Prompt ops (D12 / Phase 14). Prompts are admin-editable and versioned in the DB
@@ -24,6 +29,7 @@ export type PromptKey =
   | 'interview.system'
   | 'coaching.system'
   | 'evaluation'
+  | 'company.pack'
 
 // ── code-injected blocks (not admin-editable) ───────────────────────────
 
@@ -49,7 +55,7 @@ function weaknessBlock(weaknesses: Weakness[]): string {
   )
 }
 
-function skillBlock(pack: SkillPack | null): string {
+function skillBlock(pack: PackLike | null): string {
   if (!pack) return ''
   return `\n\nCompany interview playbook for ${pack.company} — follow its style, signals, and question patterns:\n${pack.body}`
 }
@@ -176,6 +182,21 @@ Respond with ONLY a JSON object (no other text):
 
 Be specific and cite actual answers. 2-4 weaknesses maximum — the most impactful ones only.`
 
+const COMPANY_PACK_SEED = `You are an interview-prep researcher building a concise, accurate "interview playbook" for one company so an AI interviewer can run a realistic mock interview in that company's style.
+
+Company: {{COMPANY}}
+Candidate's target role: {{ROLE}}
+
+If you have a web search tool, use it to find the company's domain/products, engineering culture, and—most importantly—how they actually interview for this kind of role (process, rounds, signals, known question styles, leadership/values frameworks). Prefer recent, reputable sources. If you cannot verify a detail, describe the typical bar for a company of this tier rather than inventing specifics.
+
+Respond with ONLY a JSON object (no other text):
+{
+  "company": "<canonical company name>",
+  "roles": ["<role this pack suits>", "..."],
+  "summary": "<one sentence describing this company's interview style>",
+  "body": "<a markdown playbook the interviewer will follow. Cover: what the company builds + who they are; their interview process/rounds for this role; the signals/values they screen for (e.g. leadership principles, product sense, scale); the question styles and 2-4 representative example questions; and how to calibrate difficulty. ~250-450 words. No preamble.>"
+}`
+
 /**
  * The seed catalogue: prompt key → its default body + a short admin-facing label and
  * the placeholders it accepts (shown in the admin editor so edits keep them intact).
@@ -231,6 +252,14 @@ export const PROMPT_SEEDS: PromptSeed[] = [
     guardrailed: false,
     body: EVALUATION_SEED,
   },
+  {
+    key: 'company.pack',
+    label: 'Company pack — generate playbook',
+    description: 'Researches an unknown company on demand and drafts its interview playbook (D10).',
+    placeholders: ['COMPANY', 'ROLE'],
+    guardrailed: false,
+    body: COMPANY_PACK_SEED,
+  },
 ]
 
 export const PROMPT_KEYS = PROMPT_SEEDS.map((s) => s.key)
@@ -263,7 +292,7 @@ export function renderCalibrationGrade(
 export function renderInterviewSystem(
   body: string,
   profile: Profile,
-  pack: SkillPack | null,
+  pack: PackLike | null,
   weaknesses: Weakness[],
   mode: 'voice' | 'text',
 ): string {
@@ -298,6 +327,10 @@ export function renderEvaluation(body: string, profile: Profile, transcript: Tra
     .join('\n\n')
   const target = `${profile.role}${profile.company ? ` at ${profile.company}` : ''}`
   return fill(body, { TARGET: target, TRANSCRIPT: convo })
+}
+
+export function renderCompanyPack(body: string, company: string, role: string): string {
+  return fill(body, { COMPANY: company, ROLE: role })
 }
 
 export const FIRST_MESSAGE_TRIGGER =

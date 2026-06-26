@@ -31,7 +31,12 @@ function parseFrontmatter(raw: string): { meta: Record<string, string>; body: st
   return { meta, body: match[2]!.trim() }
 }
 
-export function loadSkillPacks(): SkillPack[] {
+/**
+ * Load the static `skills/*.md` packs from disk. Since Phase 15 (D10) these are only the
+ * **seed** data — `db.seedPacks()` imports them into `company_packs` on first boot, and the
+ * app reads packs from the DB at runtime. Kept file-based so the seeds stay reviewable in git.
+ */
+export function loadSeedPacks(): SkillPack[] {
   const dir = skillsDir()
   if (!fs.existsSync(dir)) return []
   return fs
@@ -51,8 +56,4 @@ export function loadSkillPacks(): SkillPack[] {
         body,
       }
     })
-}
-
-export function getSkillPack(id: string): SkillPack | null {
-  return loadSkillPacks().find((p) => p.id === id) ?? null
 }

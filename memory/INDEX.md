@@ -57,3 +57,9 @@ One entry per completed milestone. Read this before working on the repo.
   rollback (`Admin.tsx` "System prompts", `/api/admin/prompts*`, `db.activePromptBody`); seed bodies
   are `{{PLACEHOLDER}}` templates; fixed `wrapGuardrail` frame around interview/coaching (anti-jailbreak);
   red-team CI test. R17 + R19 done. Next = **Phase 15 (dynamic company packs), or Phase 17 R22/R23**.
+- [2026-06-26 — Phase 15: Dynamic company packs](2026-06-26-phase15-dynamic-company-packs.md) —
+  company packs moved into the DB (`company_packs`, migration 0005); generate-on-miss
+  (`POST /api/packs/ensure` → model draft, Anthropic `web_search` D16) cached + reused (slug-keyed);
+  4 `skills/*.md` now seed-only (`loadSeedPacks`); admin "Company packs" review queue (edit/publish/
+  regenerate/delete + staleness); `company.pack` versioned prompt. R14 done. Packs auto-use; admin = post-hoc QC.
+  Next = **Phase 16 (voice, ~closed) or Phase 17 R22/R23**.

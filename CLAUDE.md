@@ -17,7 +17,9 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > guardrail frame + red-team CI test — prompts have now left `prompts.ts` constants**). **Phase 16
 > voice** (R20) shipped (editable transcript; native audio deferred). **Phase 17 partial:** R21 (Back
 > nav) + R24 (multi-profile) ✅; **remaining R22 (fuzzy/tiered target) + R23 (evidence-gated
-> knowledge)**. **Next up = Phase 15 (dynamic company packs), or finish Phase 17 R22/R23.**
+> knowledge)**. **Phase 15 ✅ shipped** (dynamic company packs in the DB — generate-on-miss +
+> cache/reuse + Anthropic web-search + admin review queue; the 4 `skills/*.md` are now just seeds).
+> **Next up = Phase 16 (accent voice, mostly closed) or finish Phase 17 R22/R23.**
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -64,9 +66,10 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
    the `prompts` table via `db.activePromptBody(key)` and is admin-editable/versioned. To change
    a prompt at runtime, edit it in the admin UI (a new version), don't touch the constant — the
    seed is only the default/fallback. Keep `{{PLACEHOLDER}}` tokens intact when editing bodies.
-6. ~~Company knowledge = one `skills/*.md` file per company~~ **SUPERSEDED by D10:** company
-   packs are **generated on demand** (web search → draft → stored in DB → admin review) and
-   cached/reused. The 4 `skills/*.md` are the initial seed. Never hardcode company specifics
+6. ~~Company knowledge = one `skills/*.md` file per company~~ **D10 SHIPPED (Phase 15):** company
+   packs live in the `company_packs` table, **generated on demand** (`/packs/ensure` → model draft,
+   Anthropic web-search-augmented → cached/reused, slug-keyed) + admin review queue. The 4
+   `skills/*.md` are now just the boot **seed** (`loadSeedPacks`). Never hardcode company specifics
    in code.
 
 ## Requirements (from the product owner)
@@ -92,8 +95,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   quota periods, skill-pack admin, agent console.
 
 ### Re-planning 2026-06-25 — next requirements (ROADMAP Phases 11–16, D9–D15)
-- [ ] R14: **Dynamic company packs** — research an unknown company on demand (web search →
-  domain + role interview process), store + cache + reuse; admin review. (D10 · Phase 15)
+- [x] R14: **Dynamic company packs** — research an unknown company on demand (web search →
+  domain + role interview process), store + cache + reuse; admin review. Shipped 2026-06-26:
+  `company_packs` table (migration 0005); generate-on-miss (`POST /api/packs/ensure`) wired into
+  ProfileSetup; Anthropic `web_search` tool (D16) when generating on an Anthropic key; admin
+  "Company packs" review queue. Packs auto-generate + are used immediately (admin queue = post-hoc
+  QC). (D10 · Phase 15)
 - [x] R15: **Returning users + resumable sessions** — recognized every visit; leave an
   interview and resume it later exactly where it stopped. (D14 · Phase 12 ✅ 2026-06-25)
 - [ ] R16: **Durable per-user datastore for the long term** — PostgreSQL in Docker, typed
@@ -136,11 +143,12 @@ senior-bro (npm workspace monorepo)
 ├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/schema.ts     Drizzle table definitions (11 tables, FKs+indexes); migrations in server/drizzle/
+│   ├── src/schema.ts     Drizzle table definitions (12 tables, FKs+indexes); migrations in server/drizzle/
 │   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
 │   │                     sessions/magic_links + per-user config + isolation + models + usage_events
 │   │                     + plans/credit (users.plan, token_quota) + invite_codes (D11)
 │   │                     + versioned prompts (activePromptBody / createPromptVersion, D12)
+│   │                     + company_packs (generate-on-miss cache, packSlug/createPack, D10)
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
@@ -148,17 +156,17 @@ senior-bro (npm workspace monorepo)
 │   ├── src/mailer.ts     dependency-free magic-link delivery (log + optional webhook)
 │   ├── src/http.ts       shared HttpError
 │   ├── src/providers.ts  LLM abstraction: anthropic | openai | claude-cli | codex-cli | mock
-│   │                     (chat() returns text + token usage for metering)
-│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS) + fixed guardrail frame + render*() template fillers (D12/D13)
-│   ├── src/skills.ts     loads skills/*.md company packs
-│   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode)
+│   │                     (chat() returns text + token usage; ChatOptions.webSearch → Anthropic web_search, D16)
+│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack) + guardrail frame + render*() (D12/D13)
+│   ├── src/skills.ts     loadSeedPacks(): reads skills/*.md — SEED ONLY (runtime packs live in company_packs, D10)
+│   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode); /packs/ensure generate-on-miss (D10)
 ├── web/      React + Vite SPA
 │   ├── src/voice.ts      Web Speech API wrapper (STT + TTS)
 │   ├── src/api.ts        typed client for server API (cookie-authed)
 │   └── src/pages/        Login(hosted) → Profile → Calibration(free level-check) → Plan(hosted gate) →
 │                         Setup → Interview → Report → Dashboard; Plan = plans/mock-checkout/invite redeem;
 │                         Admin(hosted, role=admin): model/key mgmt, user quotas, usage, invite codes
-├── skills/   company interview packs (markdown + frontmatter)
+├── skills/   SEED company packs (markdown + frontmatter) — imported into company_packs on boot (D10)
 └── memory/   milestone log (INDEX.md + one file per milestone)
 ```
 

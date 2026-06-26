@@ -19,14 +19,29 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
       .catch(() => undefined)
   }, [])
 
+  const [researching, setResearching] = useState(false)
+
   const save = async () => {
     setBusy(true)
     setError('')
     try {
+      // Generate-on-miss (R14): a typed company with no pack picked → research + cache a pack.
+      let pack = skillPack
+      if (!pack && company.trim()) {
+        setResearching(true)
+        try {
+          const res = await api.ensurePack(company.trim(), role.trim() || 'Engineer')
+          pack = String(res.pack_id)
+        } catch {
+          // Pack research is best-effort — fall through and create the profile without one.
+        } finally {
+          setResearching(false)
+        }
+      }
       await api.createProfile({
         role,
         company: company || undefined,
-        skill_pack: skillPack || undefined,
+        skill_pack: pack || undefined,
         technologies: technologies
           .split(',')
           .map((t) => t.trim())
@@ -54,7 +69,7 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
           onChange={(e) => setRole(e.target.value)}
         />
 
-        <label>Company interview style (optional — adds a company-specific playbook)</label>
+        <label>Company interview style (optional — pick a known playbook)</label>
         <select
           value={skillPack}
           onChange={(e) => {
@@ -63,7 +78,7 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
             if (p && p.company !== 'Generic Startup') setCompany(p.company)
           }}
         >
-          <option value="">No specific company</option>
+          <option value="">No specific company / research one below</option>
           {packs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.company} — {p.summary}
@@ -71,8 +86,16 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
           ))}
         </select>
 
-        <label>Company name (optional)</label>
-        <input value={company} placeholder="e.g. Stripe" onChange={(e) => setCompany(e.target.value)} />
+        <label>…or just name your target company — we&apos;ll research its interview style</label>
+        <input
+          value={company}
+          placeholder="e.g. Stripe"
+          onChange={(e) => {
+            setCompany(e.target.value)
+            // Typing a fresh company name overrides a previously picked playbook.
+            if (skillPack) setSkillPack('')
+          }}
+        />
 
         <label>Technologies / skills, comma-separated</label>
         <input
@@ -100,7 +123,7 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
         {error && <div className="error">{error}</div>}
         <div className="mt">
           <button disabled={busy || !role.trim()} onClick={() => void save()}>
-            {busy ? 'Saving…' : 'Continue to level check →'}
+            {researching ? `Researching ${company.trim()}…` : busy ? 'Saving…' : 'Continue to level check →'}
           </button>
         </div>
       </div>

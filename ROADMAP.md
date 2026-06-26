@@ -109,7 +109,7 @@ card — for testers, partners, and early users. See D11.
   3. ~~**Phase 13 — Plans, gating & invite codes** (D11)~~ ✅ **shipped 2026-06-25.**
      Free level-check → plan gate; mocked checkout; admin-minted invite-code credit; per-call entitlement.
   4. ~~**Phase 14 — Admin-managed versioned prompts + guardrails** (D12, D13)~~ ✅ **shipped 2026-06-26.**
-  5. **Phase 15 — Dynamic company skill packs** (D10) ⬅ recommended next.
+  5. ~~**Phase 15 — Dynamic company skill packs** (D10)~~ ✅ **shipped 2026-06-26.**
   6. **Phase 16 — Accent-aware voice** (D15).
   > Rationale for ordering: 11 unblocks all storage; 12/13 make hosted usable + monetizable;
   > 14 hardens correctness/safety; 15/16 are high-value features that ride on the above.
@@ -321,13 +321,24 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - Note: tests are *structural* (no live model) — they guard the construction seam an attacker
   targets; live-model red-teaming needs a real provider and is out of CI scope.
 
-### Phase 15 — Dynamic company skill packs (D10)
-- [ ] On unknown company: model **web-searches** company + domain + role interview process
-      (source per Q4) and drafts a structured pack.
-- [ ] Store generated packs in DB (cache + reuse across users); migrate the 4 static
-      `skills/*.md` in as seeds; keep the markdown+frontmatter shape.
-- [ ] Admin review queue: approve / edit / publish / refresh a generated pack; staleness TTL.
-- [ ] Interview setup uses the stored pack (generate-on-miss, then cache).
+### Phase 15 — Dynamic company skill packs (D10) ✅ (2026-06-26)
+- [x] On unknown company: the model drafts a structured pack. **Web search (D16) is wired via
+      Anthropic's hosted `web_search` tool** when the generating call is on an Anthropic key
+      (`providers.ts` `ChatOptions.webSearch`; `searched` provenance flag); other providers draft
+      from model knowledge. The generation prompt is a **versioned prompt** (`company.pack`, Phase 14).
+- [x] Packs stored in DB (`company_packs`, migration `0005`), **cached + reused across users**
+      (slug-normalized so "Stripe"/"stripe Inc" hit one row); the 4 static `skills/*.md` seeded in
+      on boot as `source: 'seed'` (markdown body kept). `skills.ts` is now seed-only.
+- [x] Admin review queue (`Admin.tsx` "Company packs", `/api/admin/packs*`): edit body, publish/
+      unpublish, **regenerate** (re-draft, search-augmented), delete; **staleness** badge at >90d.
+- [x] Interview setup uses the stored pack — **generate-on-miss** (`POST /api/packs/ensure`) wired
+      into ProfileSetup ("…name your target company — we'll research it"), then cached; interviews
+      resolve the published pack by id/slug.
+- **Product call (owner, flag at gate):** packs auto-generate on miss and are **used immediately**
+      (best UX/scale); the admin queue is *post-hoc* quality control, not an approval gate. Free-intro
+      users may generate a pack during onboarding (counts against the free budget; cost amortizes since
+      packs are shared). Generation capped at 1500 tokens.
+- **Gate: owner reviews before Phase 16 / Phase 17 R22–R23.**
 
 ### Phase 16 — Accent-aware voice (D15 / D17)
 - [x] Stop auto-sending raw STT. Add an **editable transcript** the user confirms before send
