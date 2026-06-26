@@ -144,6 +144,28 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   + `/api/profiles/:id/select`, profile/weaknesses/progress read the *active* profile, Dashboard
   switcher pills + New. (Phase 17)
 
+### Owner additions 2026-06-27 (R25–R29) — Arvan host, admin UX, data future-proofing, deploy, metrics
+- [ ] R25: **Complete & auditable host-token metering** — guarantee *every* model call on **our host
+  models** is metered, including first-time **company-pack generation** and the post-interview
+  **distillation** call; expose an admin-visible per-event audit so no host token goes uncounted.
+  Extends R13/Phase 8 (metering already wraps every `runModel`; this is a coverage audit + hardening +
+  the Arvan provider below). (D4 · Phase 18)
+- [ ] R26: **Admin dashboard upgrade** — (a) first-class **model + price management for ArvanCloud
+  AIaaS** (OpenAI-compatible; per-MTok **input/output** prices; configurable base URL per model — see
+  D19), and (b) **frictionless system-prompt version review/rollback** (diff/compare versions, one-tap
+  activate). Extends R13 (admin model/key) + R17 (versioned prompts). (D12 · Phase 19)
+- [ ] R27: **Future-proof natural-language datastore + cheap migration** — store gathered NL data
+  (user model, company packs, claims, events) as **versioned structured-NL records** so a future
+  schema change migrates **lazily per-user on first touch after a release**, using **our API only**
+  (never the user's models), preferring deterministic transforms and calling the model only for
+  genuine semantic reshapes. RAG/Elastic deferred to a later *retrieval* feature, not the migration
+  mechanism. (D18 · Phase 20)
+- [ ] R28: **Deploy to ArvanCloud Kubernetes** — containerize server+web, k8s manifests/Helm + managed
+  Postgres, secrets, ingress/TLS; deploy via the owner-provided kubeconfig. (Phase 21)
+- [ ] R29: **Observability — Prometheus + Grafana on Arvan** — expose app/runtime/usage metrics
+  (`/metrics`), run Prometheus + Grafana in the cluster, ship dashboards (token burn, cost, latency,
+  errors, active users). Follows R28. (Phase 22)
+
 ## Architecture
 
 ```

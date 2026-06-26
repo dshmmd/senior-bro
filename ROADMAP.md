@@ -48,6 +48,8 @@ card — for testers, partners, and early users. See D11.
 | D15 | **Voice = accent-aware** (2026-06-25): stop auto-sending raw speech-to-text. Two paths: (a) **send the audio to the model** where the provider supports audio input (accent help, no lossy transcription); (b) universal fallback = STT with an **editable transcript** the user confirms before sending. Prefer (a) when available, always offer (b). | Owner: raw STT can't be edited and loses accent signal — let the model hear the voice or let the user fix the text first |
 | D16 | **Company research via the provider's built-in web search tool** (2026-06-25, answers Q4): generate packs with Anthropic/OpenAI web search behind a thin `searchProvider` seam; results cached per company in DB (one-time cost, reused across users). Swap to Tavily/Brave later only if we need tighter per-search token control. | Easiest path to production; caching makes token cost a non-issue; the seam keeps the door open |
 | D17 | **Voice = editable transcript by default; native audio is an OpenAI/Gemini-only upgrade** (2026-06-25, refines D15/Q6): the universal accent-aware path is STT → **editable transcript the user confirms before sending** (shipped). True "model hears the voice" requires an audio-in model — **Claude has none**; only OpenAI (`gpt-4o-audio` / realtime) and Gemini do. Treat native audio as a per-provider capability behind a seam, offered only when the selected model supports it; never block the core flow on it. | Owner wants the model to hear accents, but our primary provider (Claude) can't take audio — so the editable transcript must be the floor, and native audio is an opt-in upgrade on capable providers |
+| D18 | **Versioned natural-language records + lazy per-user LLM migration** (2026-06-27, answers R27): store gathered NL data as **structured records with natural-language values + a `schema_version`** (Postgres **JSONB**, one datastore per D9). On a schema change, migrate **lazily and per-user on first touch after the release** — prefer deterministic/mechanical transforms; call **our host API** (never the user's models/keys) only for genuine *semantic* reshapes, with a dedicated migration prompt; idempotent, backgroundable. **Chosen over RAG**, which is a *retrieval* technique, not a storage/migration strategy (you'd still have to store + migrate the underlying data); Elastic/vector DB deferred to a future retrieval feature. | Owner's worry is a cheap path off today's schema without bulk re-encoding everything through a model. Lazy per-user migration means only active users' data moves, once, on demand; JSONB keeps schema flexibility without a second datastore; most migrations need no model at all |
+| D19 | **ArvanCloud AIaaS is an OpenAI-compatible host provider** (2026-06-27, answers the Arvan-usage question for R25/R26): integrate Arvan via the existing `openai` provider path with a **per-model configurable base URL** (currently hard-coded to `api.openai.com`). OpenAI-compatible chat completions return a `usage` object (`prompt_tokens`/`completion_tokens`), which our provider already parses — **including on streamed calls** (`stream_options.include_usage`, already set). So with Arvan's **per-MTok input/output prices** in the `models` table, `runModelFull` already computes `cost = inTok/1e6·priceIn + outTok/1e6·priceOut` — **usage + cost are automatic; the only code gap is the configurable base URL.** Caveat: confirm Arvan returns `usage` on streamed responses; if not, fall back to the char-estimate. | Reuses the whole metering/quota stack with one small change; avoids a bespoke provider; keeps cost accounting exact for a per-MTok-priced provider |
 
 > **North star (owner, 2026-06-25):** "requirements are not god's words — use your
 > creativity; the goal is an *easy-to-use service for people who want to learn*, built to
@@ -388,6 +390,50 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
       + `POST /api/profiles/:id/select`; profile/weaknesses/progress resolve the **active** profile
       (falls back to latest when unset); creating a profile makes it active; Dashboard switcher pills +
       New. Existing single-profile users unaffected.
+
+---
+
+## Phases 18–22 — owner additions 2026-06-27 (R25–R29)
+
+> Theme: make **ArvanCloud** the production host (provider + k8s + metrics), tighten money-critical
+> metering, sharpen the admin UX, and future-proof the NL data. **Recommended order:** 18 → 19 → 20,
+> then 21 (deploy) → 22 (metrics) once the owner provides the kubeconfig. 18 & 19 ride the existing
+> models/metering/prompt stack and unlock real (Arvan-billed) usage; 20 is independent and can slot
+> anywhere; 21/22 are explicitly "later / after that" per the owner.
+
+### Phase 18 — ArvanCloud host provider + complete metering (R25, D19)
+- [ ] Per-model **configurable base URL** on the `openai` provider path (today hard-coded to
+      `api.openai.com`) so Arvan AIaaS (OpenAI-compatible) is just a model row with its base URL +
+      per-MTok in/out prices. Validate-key + chat + **streamed `usage`** all reuse the existing path.
+- [ ] **Metering coverage audit**: assert every host-model call routes through `runModel`/`recordUsage`
+      — interview, calibration, evaluation, **company-pack generation**, **post-interview distillation**
+      (already wrapped; confirm + lock with a test). No host token uncounted.
+- [ ] Confirm Arvan returns `usage` on streamed responses; if not, fall back to the char-estimate and
+      flag it in the admin UI so cost stays honest.
+- [ ] Admin-visible per-event usage audit (who/when/model/in-out tokens/cost) building on `usage_events`.
+
+### Phase 19 — Admin dashboard upgrade (R26)
+- [ ] Model+price management tuned for Arvan: base URL, per-MTok input/output price, enable/default,
+      live key rotation — minimal-friction add/edit (extends the R13 admin model catalog).
+- [ ] System-prompt version UX: list versions with **diff/compare**, preview the rendered frame, one-tap
+      **activate/rollback** (extends R17). Make prompt iteration genuinely easy for a non-engineer admin.
+
+### Phase 20 — Future-proof NL datastore + lazy migration (R27, D18)
+- [ ] Add a `schema_version` to NL-bearing records; move free-form bodies toward **JSONB** structured-NL.
+- [ ] A **lazy migrator**: on a user's first interaction after a release, transform their stale-version
+      records to the new shape — deterministic transforms first, **our-API** semantic reshape only when
+      needed (dedicated migration prompt; never the user's key); idempotent + backgroundable.
+- [ ] (Deferred sub-track) RAG/retrieval over company/user knowledge — a *separate* feature, not the
+      migration mechanism (D18).
+
+### Phase 21 — Deploy to ArvanCloud Kubernetes (R28)
+- [ ] Containerize server (+ built web) and provide k8s manifests/Helm: managed Postgres, secrets
+      (`SENIORBRO_SECRET`, host keys), ingress + TLS, health/readiness probes. Deploy via owner's kubeconfig.
+- **Gate:** owner provides the kubeconfig before this starts.
+
+### Phase 22 — Observability: Prometheus + Grafana on Arvan (R29)
+- [ ] `/metrics` endpoint (app + runtime + usage: token burn, cost, latency, errors, active users).
+- [ ] Prometheus + Grafana in the cluster; ship starter dashboards + alerts. Follows Phase 21.
 
 ---
 
