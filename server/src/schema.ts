@@ -7,6 +7,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
@@ -134,6 +135,31 @@ export const weaknesses = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('weaknesses_profile_id_idx').on(t.profileId)],
+)
+
+// Evidence-gated skill claims (R23 / Phase 17). Every skill the candidate self-reports starts
+// as an `unverified` claim; an interview evaluation that finds evidence flips it to
+// `demonstrated` or `weak`. The profile/level reflect *shown* ability, not self-report — so the
+// interviewer is told to probe unverified claims rather than take them as fact. Unique per
+// (profile, skill) so re-stating a skill upserts instead of duplicating.
+export const skillClaims = pgTable(
+  'skill_claims',
+  {
+    id: serial('id').primaryKey(),
+    profileId: integer('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    skill: text('skill').notNull(),
+    // 'unverified' (claimed, not yet shown) | 'demonstrated' (shown in an interview) | 'weak'.
+    status: text('status').notNull().default('unverified'),
+    evidence: text('evidence'),
+    sourceInterviewId: integer('source_interview_id').references(() => interviews.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('skill_claims_profile_skill_idx').on(t.profileId, t.skill)],
 )
 
 export const models = pgTable('models', {

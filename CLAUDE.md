@@ -16,10 +16,11 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > mocked checkout + invite-code credit; **14: admin-managed versioned prompts in the DB + fixed
 > guardrail frame + red-team CI test — prompts have now left `prompts.ts` constants**). **Phase 16
 > voice** (R20) shipped (editable transcript; native audio deferred). **Phase 17 partial:** R21 (Back
-> nav) + R24 (multi-profile) + **R22 (fuzzy/tiered target)** ✅; **remaining R23 (evidence-gated
-> knowledge)**. **Phase 15 ✅ shipped** (dynamic company packs in the DB — generate-on-miss +
+> nav) + R24 (multi-profile) + R22 (tiered target) + **R23 (evidence-gated knowledge)** ✅ —
+> **Phase 17 COMPLETE.** **Phase 15 ✅ shipped** (dynamic company packs in the DB — generate-on-miss +
 > cache/reuse + Anthropic web-search + admin review queue; the 4 `skills/*.md` are now just seeds).
-> **Next up = Phase 17 R23 (evidence-gated knowledge) to close the phase.**
+> **All owner-directed phases (11–17) are done.** Next work is owner's call — see ROADMAP Phases 4/5/7
+> (personalization, resume/opportunity pipeline, learn-while-interviewing) or new owner direction.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -129,9 +130,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   **Tier 1 / Tier 2 / Tier 3** (FAANG-bar / scale-up / general) so setting a target is easy; the
   tier pack targets that tier's bar. Shipped 2026-06-26: tiers seeded as `source:'tier'` company
   packs (`TIER_SEED_PACKS`), tier cards in ProfileSetup, `/api/skills` returns `source`. (D10 · Phase 17)
-- [ ] R23: **Evidence-gated knowledge** — don't accept a skill/claim from the user as true until
+- [x] R23: **Evidence-gated knowledge** — don't accept a skill/claim from the user as true until
   they've actually answered questions demonstrating it; the profile/level reflects *shown*
-  ability, not self-report. (Phase 17, ties into calibration R6 + weaknesses R7)
+  ability, not self-report. Shipped 2026-06-26: `skill_claims` table (migration 0006) seeded
+  `unverified` from the profile's technologies; interviewer probes them (code-level frame);
+  evaluation returns `skill_evidence` → `applySkillEvidence` flips to demonstrated/weak; Dashboard
+  "shown vs. claimed" readout. (Phase 17, ties into calibration R6 + weaknesses R7)
 - [x] R24: **Multiple profiles per user** — keep several profiles (different stack/seniority) and
   switch between them. Shipped 2026-06-25: `users.active_profile_id` (migration 0003), `/api/profiles`
   + `/api/profiles/:id/select`, profile/weaknesses/progress read the *active* profile, Dashboard
@@ -144,12 +148,13 @@ senior-bro (npm workspace monorepo)
 ├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/schema.ts     Drizzle table definitions (12 tables, FKs+indexes); migrations in server/drizzle/
+│   ├── src/schema.ts     Drizzle table definitions (13 tables, FKs+indexes); migrations in server/drizzle/
 │   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
 │   │                     sessions/magic_links + per-user config + isolation + models + usage_events
 │   │                     + plans/credit (users.plan, token_quota) + invite_codes (D11)
 │   │                     + versioned prompts (activePromptBody / createPromptVersion, D12)
 │   │                     + company_packs (generate-on-miss cache, packSlug/createPack, D10)
+│   │                     + skill_claims (evidence-gated skills: seedClaims/applySkillEvidence, R23)
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
@@ -158,7 +163,8 @@ senior-bro (npm workspace monorepo)
 │   ├── src/http.ts       shared HttpError
 │   ├── src/providers.ts  LLM abstraction: anthropic | openai | claude-cli | codex-cli | mock
 │   │                     (chat() returns text + token usage; ChatOptions.webSearch → Anthropic web_search, D16)
-│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack) + guardrail frame + render*() (D12/D13)
+│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack) + guardrail frame
+│   │                     + code-level claims/evidence framing (R23) + render*() (D12/D13)
 │   ├── src/skills.ts     loadSeedPacks(): reads skills/*.md — SEED ONLY (runtime packs live in company_packs, D10)
 │   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode); /packs/ensure generate-on-miss (D10)
 ├── web/      React + Vite SPA

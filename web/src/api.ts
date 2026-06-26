@@ -6,6 +6,14 @@ export interface SkillPackSummary {
   source: 'seed' | 'generated' | 'tier'
 }
 
+export interface SkillClaim {
+  id: number
+  skill: string
+  status: 'unverified' | 'demonstrated' | 'weak'
+  evidence: string | null
+  source_interview_id: number | null
+}
+
 export interface Profile {
   id: number
   role: string
@@ -17,6 +25,7 @@ export interface Profile {
   level: string | null
   level_summary: string | null
   weaknesses?: Weakness[]
+  skill_claims?: SkillClaim[]
 }
 
 export interface ProfileListItem {

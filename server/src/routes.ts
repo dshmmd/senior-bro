@@ -714,7 +714,11 @@ api.get('/profile', async (c) => {
   const user = await requireUser(c)
   const profile = await db.activeProfile(user.id)
   if (!profile) return c.json(null)
-  return c.json({ ...profile, weaknesses: await db.listWeaknesses(profile.id) })
+  const [weaknesses, skill_claims] = await Promise.all([
+    db.listWeaknesses(profile.id),
+    db.listClaims(profile.id),
+  ])
+  return c.json({ ...profile, weaknesses, skill_claims })
 })
 
 // All of the user's profiles + which one is active (R24 — the profile switcher).
@@ -783,7 +787,8 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
   }
   const pack = profile.skill_pack ? await db.resolvePublishedPack(profile.skill_pack) : null
   const body = await db.activePromptBody('interview.system')
-  return renderInterviewSystem(body, profile, pack, await db.listWeaknesses(profile.id), interview.mode)
+  const [weaknesses, claims] = await Promise.all([db.listWeaknesses(profile.id), db.listClaims(profile.id)])
+  return renderInterviewSystem(body, profile, pack, weaknesses, interview.mode, claims)
 }
 
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '').trim()
@@ -876,18 +881,23 @@ api.post('/interviews/:id/finish', async (c) => {
     throw new HttpError(400, 'not enough conversation to evaluate — answer at least one question')
 
   const profile = await ownProfile(user.id, interview.profile_id)
+  const claims = await db.listClaims(profile.id)
 
   const evalBody = await db.activePromptBody('evaluation')
   const raw = await runModel(
     user,
     call,
     'You evaluate mock interviews and respond with strict JSON.',
-    [{ role: 'user', content: renderEvaluation(evalBody, profile, interview.transcript) }],
+    [{ role: 'user', content: renderEvaluation(evalBody, profile, interview.transcript, claims) }],
     8192,
   )
-  const report = extractJson<db.InterviewReport>(raw)
+  const report = extractJson<
+    db.InterviewReport & { skill_evidence?: { skill: string; verdict: string; note?: string }[] }
+  >(raw)
   await db.finishInterview(id, report)
   for (const w of report.weaknesses) await db.addWeakness(profile.id, w, id)
+  // Evidence-gating (R23): flip claimed skills to demonstrated/weak based on shown evidence.
+  if (Array.isArray(report.skill_evidence)) await db.applySkillEvidence(profile.id, id, report.skill_evidence)
   return c.json(report)
 })
 

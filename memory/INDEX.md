@@ -57,6 +57,10 @@ One entry per completed milestone. Read this before working on the repo.
   rollback (`Admin.tsx` "System prompts", `/api/admin/prompts*`, `db.activePromptBody`); seed bodies
   are `{{PLACEHOLDER}}` templates; fixed `wrapGuardrail` frame around interview/coaching (anti-jailbreak);
   red-team CI test. R17 + R19 done. Next = **Phase 15 (dynamic company packs), or Phase 17 R22/R23**.
+- [2026-06-26 — R23: Evidence-gated knowledge](2026-06-26-r23-evidence-gated-knowledge.md) —
+  self-reported skills become `skill_claims` (migration 0006) that start `unverified` and flip to
+  `demonstrated`/`weak` only when an interview's `skill_evidence` shows it; interviewer probes claims
+  (code-level frame); Dashboard "shown vs. claimed". **Closes Phase 17.** All owner phases 11–17 done.
 - [2026-06-26 — R22: Tiered target](2026-06-26-r22-tiered-target.md) —
   pick a **Tier** (1/2/3 = FAANG-bar/scale-up/general) when the company is unknown; tiers seeded as
   `source:'tier'` company packs (`TIER_SEED_PACKS`, stable `tier-N` slugs) reusing the Phase 15

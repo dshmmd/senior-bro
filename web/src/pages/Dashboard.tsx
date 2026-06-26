@@ -56,6 +56,8 @@ export function Dashboard({
   }
 
   const open = weaknesses.filter((w) => w.status !== 'resolved')
+  // Evidence-gated skills (R23): shown vs. merely claimed.
+  const claims = profile.skill_claims ?? []
   // The most recent unfinished interview is the one we offer to resume (D14).
   const resumable = history.find((h) => h.status === 'active') ?? null
   // "Returning" = they've been here and run interviews before (drives the greeting).
@@ -134,6 +136,35 @@ export function Dashboard({
           <span style={{ fontSize: 22 }}>→</span>
         </div>
       </div>
+
+      {claims.length > 0 && (
+        <div className="card">
+          <b>Your skills — shown vs. claimed</b>
+          <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>
+            We only count a skill once you&apos;ve proven it in an interview — not just listed it.
+          </div>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+            {claims.map((c) => {
+              const badge =
+                c.status === 'demonstrated'
+                  ? { cls: 'badge resolved', label: '✓ shown' }
+                  : c.status === 'weak'
+                    ? { cls: 'badge open', label: 'needs work' }
+                    : { cls: 'badge', label: 'claimed — unproven' }
+              return (
+                <span
+                  key={c.id}
+                  className={badge.cls}
+                  title={c.evidence ?? 'Not yet demonstrated in an interview'}
+                  style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                >
+                  {c.skill} · {badge.label}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <h2>Start a mock interview</h2>
       <div className="row">

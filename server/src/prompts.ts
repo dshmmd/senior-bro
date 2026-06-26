@@ -1,4 +1,4 @@
-import type { Profile, Weakness, TranscriptEntry } from './db.js'
+import type { Profile, Weakness, TranscriptEntry, SkillClaim } from './db.js'
 
 /** Minimal shape the interview prompt needs from a company pack (DB row or seed). */
 export interface PackLike {
@@ -58,6 +58,31 @@ function weaknessBlock(weaknesses: Weakness[]): string {
 function skillBlock(pack: PackLike | null): string {
   if (!pack) return ''
   return `\n\nCompany interview playbook for ${pack.company} — follow its style, signals, and question patterns:\n${pack.body}`
+}
+
+/**
+ * Evidence-gating frame (R23). Kept in code (not the editable body) so it applies on every prompt
+ * version. Tells the interviewer to treat self-reported skills as unverified claims to probe — the
+ * profile reflects *shown* ability, not self-report.
+ */
+function claimsBlock(claims: SkillClaim[]): string {
+  if (claims.length === 0) return ''
+  const line = (c: SkillClaim) =>
+    c.status === 'demonstrated'
+      ? `- ${c.skill} — already demonstrated; only revisit if relevant`
+      : c.status === 'weak'
+        ? `- ${c.skill} — shown weak before; give a fair chance to prove it`
+        : `- ${c.skill} — UNVERIFIED, the candidate only claimed it; probe it to confirm real depth`
+  return `\n\nEVIDENCE-GATING — the candidate SELF-REPORTED these skills. Do NOT take them as fact. Actively probe the unverified ones; never credit a skill the candidate can't demonstrate when asked:\n${claims
+    .map(line)
+    .join('\n')}`
+}
+
+/** Ask the evaluator to judge each claimed skill strictly from the transcript (R23). */
+function evidenceInstruction(claims: SkillClaim[]): string {
+  if (claims.length === 0) return ''
+  const skills = claims.map((c) => c.skill).join(', ')
+  return `\n\nThe candidate claimed these skills: ${skills}. Add a "skill_evidence" array to your JSON: for each claimed skill the transcript lets you judge, {"skill": "<exact skill from the list>", "verdict": "demonstrated" | "weak" | "not_shown", "note": "<one sentence citing the transcript>"}. Judge strictly from shown evidence — omit skills the interview never touched.`
 }
 
 function replyStyle(mode: 'voice' | 'text'): string {
@@ -295,13 +320,15 @@ export function renderInterviewSystem(
   pack: PackLike | null,
   weaknesses: Weakness[],
   mode: 'voice' | 'text',
+  claims: SkillClaim[] = [],
 ): string {
-  const filled = fill(body, {
-    PROFILE: profileBlock(profile),
-    SKILL_PACK: skillBlock(pack),
-    WEAKNESSES: weaknessBlock(weaknesses),
-    REPLY_STYLE: replyStyle(mode),
-  })
+  const filled =
+    fill(body, {
+      PROFILE: profileBlock(profile),
+      SKILL_PACK: skillBlock(pack),
+      WEAKNESSES: weaknessBlock(weaknesses),
+      REPLY_STYLE: replyStyle(mode),
+    }) + claimsBlock(claims)
   return wrapGuardrail(filled)
 }
 
@@ -321,12 +348,17 @@ export function renderCoachingSystem(
   return wrapGuardrail(filled)
 }
 
-export function renderEvaluation(body: string, profile: Profile, transcript: TranscriptEntry[]): string {
+export function renderEvaluation(
+  body: string,
+  profile: Profile,
+  transcript: TranscriptEntry[],
+  claims: SkillClaim[] = [],
+): string {
   const convo = transcript
     .map((t) => `${t.role === 'assistant' ? 'INTERVIEWER' : 'CANDIDATE'}: ${t.content}`)
     .join('\n\n')
   const target = `${profile.role}${profile.company ? ` at ${profile.company}` : ''}`
-  return fill(body, { TARGET: target, TRANSCRIPT: convo })
+  return fill(body, { TARGET: target, TRANSCRIPT: convo }) + evidenceInstruction(claims)
 }
 
 export function renderCompanyPack(body: string, company: string, role: string): string {

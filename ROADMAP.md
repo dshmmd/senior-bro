@@ -361,9 +361,14 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
       picking a tier attaches its playbook to the profile and calibrates the interview to that bar.
       ProfileSetup shows tier cards under a free-text company box; `/api/skills` now returns `source`
       so the UI splits tiers from companies. Builds on Phase 15 company packs (D10).
-- [ ] **R23 Evidence-gated knowledge:** never accept a self-reported skill as true until the user
-      has answered questions demonstrating it; level/strengths reflect *shown* ability. Ties into
-      calibration (R6) and weakness detection (R7).
+- [x] **R23 Evidence-gated knowledge** ✅ (2026-06-26): self-reported skills become `skill_claims`
+      (migration 0006) that start **`unverified`** and only flip to **`demonstrated`** / **`weak`**
+      when an interview's evaluation finds evidence. The interviewer is told (in code, version-proof
+      like the guardrail) to treat claimed skills as unverified and probe them; the evaluator returns
+      a `skill_evidence` verdict per claimed skill that `finishInterview` applies (a demonstrated skill
+      never downgrades on a later session). Dashboard shows a "shown vs. claimed" readout; `/profile`
+      returns `skill_claims`. Ties into calibration (R6) and weakness detection (R7).
+- **Phase 17 complete** (R21 ✅, R22 ✅, R23 ✅, R24 ✅). **Gate: owner reviews.**
 - [x] **R24 Multiple profiles per user** ✅ (2026-06-25): `users.active_profile_id` (migration 0003,
       `: AnyPgColumn` annotation to break the users↔profiles circular-FK type cycle); `GET /api/profiles`
       + `POST /api/profiles/:id/select`; profile/weaknesses/progress resolve the **active** profile

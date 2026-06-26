@@ -340,7 +340,21 @@ function mockReply(system: string, messages: ChatMessage[]): string {
         comment: 'Reasonable answer with room for depth.',
       })),
     })
-  if (system.includes('evaluate mock interviews'))
+  if (system.includes('evaluate mock interviews')) {
+    // R23: if the eval prompt listed claimed skills, judge them (mock: first weak, rest shown).
+    const claimed = /claimed these skills:\s*([^.]+)\./.exec(firstUser)?.[1]
+    const skillEvidence = (claimed ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((skill, i) => ({
+        skill,
+        verdict: i === 0 ? 'weak' : 'demonstrated',
+        note:
+          i === 0
+            ? `Answers touched ${skill} but stayed shallow.`
+            : `Showed solid command of ${skill} under follow-ups.`,
+      }))
     return JSON.stringify({
       overall_score: 72,
       level_estimate: 'mid',
@@ -361,7 +375,9 @@ function mockReply(system: string, messages: ChatMessage[]): string {
       ],
       advice:
         'You are closer than you think — one focused week on system design depth would move you a full level. Keep going.',
+      skill_evidence: skillEvidence,
     })
+  }
   // interview / coaching conversation: 3 questions, then wrap
   const turns = messages.filter((m) => m.role === 'user').length
   if (turns > MOCK_QUESTIONS.length)

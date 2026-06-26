@@ -43,6 +43,13 @@
       "when": 1782453464622,
       "tag": "0005_slim_rachel_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782455158278,
+      "tag": "0006_exotic_phalanx",
+      "breakpoints": true
     }
   ]
 }
