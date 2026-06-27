@@ -169,6 +169,11 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 - [ ] R29: **Observability — Prometheus + Grafana on Arvan** — expose app/runtime/usage metrics
   (`/metrics`), run Prometheus + Grafana in the cluster, ship dashboards (token burn, cost, latency,
   errors, active users). Follows R28. (Phase 22)
+- [ ] R30: **Accent-aware voice via server-side STT** — upgrade beyond browser Web Speech STT by
+  transcribing the candidate's audio on our server through an OpenAI-compatible gateway's transcription
+  endpoint (**AvalAI** `/v1/audio/transcriptions`, Whisper/`gpt-4o-transcribe`) → editable transcript →
+  any chat model. Model-agnostic; native audio-in (gpt-4o-audio/Gemini) stays a later, passthrough-gated
+  option. **Owner deciding the provider — build deferred until they confirm.** (D20, refines D17)
 
 ## Architecture
 
