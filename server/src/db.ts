@@ -785,6 +785,38 @@ export async function defaultModel(): Promise<ModelOption | null> {
   return row ? toModel(row) : null
 }
 
+// ── per-feature model routing (R35 / D23) ───────────────────────────
+
+/** The model_id an admin assigned to a feature, if any and still enabled; else null (→ default). */
+export async function assignedFeatureModel(featureKey: string): Promise<number | null> {
+  const [row] = await db
+    .select({ modelId: t.featureModels.modelId })
+    .from(t.featureModels)
+    .where(eq(t.featureModels.featureKey, featureKey))
+  if (row?.modelId == null) return null
+  const model = await getModel(row.modelId)
+  return model?.enabled ? model.id : null
+}
+
+/** Every feature's current assignment (raw model_id, including disabled/missing) for the admin UI. */
+export async function listFeatureModels(): Promise<Record<string, number | null>> {
+  const rows = await db.select().from(t.featureModels)
+  const map: Record<string, number | null> = {}
+  for (const r of rows) map[r.featureKey] = r.modelId
+  return map
+}
+
+/** Assign (or clear, with null) the model that powers a feature. Upserts on the feature key. */
+export async function setFeatureModel(featureKey: string, modelId: number | null): Promise<void> {
+  await db
+    .insert(t.featureModels)
+    .values({ featureKey, modelId, updatedAt: new Date().toISOString() })
+    .onConflictDoUpdate({
+      target: t.featureModels.featureKey,
+      set: { modelId, updatedAt: new Date().toISOString() },
+    })
+}
+
 /** Resolve a catalog model into a usable AppConfig (decrypts the host key). */
 export async function modelConfig(id: number): Promise<{ cfg: AppConfig; option: ModelOption } | null> {
   const [row] = await db.select().from(t.models).where(eq(t.models.id, id))

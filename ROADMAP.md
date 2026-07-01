@@ -482,10 +482,15 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
       `profile_id`; `users.active_profile_id` nulls out so `activeProfile()` falls back to the latest.
       Dashboard shows a per-profile delete (✕) with a confirm; deleting frees a first-impression slot
       (R32). Cross-user delete is a 404 (isolation intact — proven in `verify-ph23.mjs`).
-- [ ] R35: Per-feature model routing (D23) — groundwork, not a hard blocker (falls back to today's
-      single global default if the admin assigns nothing per-feature).
-- **Sub-gate (2026-07-02):** R32 + R36 shipped & verified — the free-tier business-model change (the
-  owner's stated conflict-resolution priority) + delete. Remaining Phase 23 work: R35 then R31 (CV).
+- [x] **R35: Per-feature model routing (D23)** ✅ (2026-07-02). `feature_models` table (migration
+      0010) maps a feature key → a curated model; `server/src/features.ts` is the registry
+      (`resume.parse`, `calibration`, `company.pack`, `interview.technical`, `personalization.distill`).
+      `resolveCall(user, feature?)` uses the assigned model for platform-funded calls (free-intro +
+      host), overriding the global default / the host user's pick; **BYOK is never routed** (their key,
+      their cost). Unassigned/disabled → falls back to `is_default`, so zero admin action preserves
+      behavior. Admin UI: "Feature model routing" dropdowns; `GET/PUT /api/admin/feature-models`.
+      Locked by `scripts/verify-ph35.mjs` (routing proven via metering: routed calibration incurs cost).
+- **Sub-gate (2026-07-02):** R32 + R36 + R35 shipped & verified. Remaining Phase 23 work: **R31 (CV)**.
 - **Gate:** owner reviews the free-tier UX (how "2 of 3 first impressions left" is communicated, and
   the delete-position confirmation copy) before it ships.
 

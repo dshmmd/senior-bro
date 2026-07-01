@@ -28,10 +28,11 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > metered from prompt/completion tokens with a zero-usage fallback. Owner additions **R26–R29** (admin
 > dashboard upgrade, NL-store lazy migration D18, k8s deploy, Prometheus/Grafana) are queued.
 > **Owner additions 2026-07-02 (R31–R36, D21/D22/D23, Phases 23–24).** **Phase 23 partial ✅:**
-> **R32** (shared 3-per-user "first impression" free tier, redefining R18's unlimited free calibration)
-> + **R36** (delete a profile/position + its history, which frees a first-impression slot) shipped &
-> verified 2026-07-02 (`profiles.first_impression_at` migration 0009; `scripts/verify-ph23.mjs`).
-> **Remaining Phase 23:** R35 (per-feature admin model routing, D23) then R31 (CV-first onboarding).
+> **R32** (shared 3-per-user "first impression" free tier, redefining R18's unlimited free calibration),
+> **R36** (delete a profile/position + its history, which frees a slot), and **R35** (per-feature admin
+> model routing, D23 — `feature_models` migration 0010 + `server/src/features.ts`) shipped & verified
+> 2026-07-02 (`scripts/verify-ph23.mjs`, `scripts/verify-ph35.mjs`).
+> **Remaining Phase 23:** R31 (CV-first onboarding).
 > **Phase 24 queued:** interview kinds/domains (technical + HR, extensible) with per-domain prompts +
 > gamification constellations (R33/R34/D22). See ROADMAP Phases 23–24.
 
@@ -204,12 +205,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   (D7/Phase 6) becomes per-interview-kind; a kind's constellation/dashboard section stays hidden until
   the user has at least one interview of that kind (no empty HR constellation for a technical-only
   user, and vice versa). (D22 · Phase 24)
-- [ ] R35: **Per-feature model selection (admin)** — replace the single global "default model" (today
-  powers every free-intro call — calibration, company-pack research, distillation) with a **model
-  chosen per feature/purpose** (e.g. resume-parse, first-knowledge-build, calibration, company-pack,
-  technical interview, HR interview, distillation), each falling back to the global default when
-  unset. Extends R13's admin model catalog (`server/src/routes.ts` `defaultModel()`/`resolveCall`).
-  (D23 · Phase 19)
+- [x] R35: **Per-feature model selection (admin)** — replace the single global "default model" with a
+  **model chosen per feature/purpose**, each falling back to the global default when unset. Shipped
+  2026-07-02: `feature_models` table (migration 0010) + `server/src/features.ts` registry
+  (resume.parse / calibration / company.pack / interview.technical / personalization.distill);
+  `resolveCall(user, feature?)` routes platform-funded calls (BYOK never routed); admin "Feature model
+  routing" UI + `GET/PUT /api/admin/feature-models`. Verified by `scripts/verify-ph35.mjs`. (D23 · Phase 23)
 - [x] R36: **Delete a profile/position (+ its history)** — a user can delete one of their profiles
   (R24); the delete cascades to its interviews/weaknesses/skill-claims/events/user-model. This is how
   a user frees up a burned first-impression slot (R32) without it auto-resetting. Shipped 2026-07-02:
@@ -223,7 +224,7 @@ senior-bro (npm workspace monorepo)
 ├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/schema.ts     Drizzle table definitions (15 tables, FKs+indexes); migrations in server/drizzle/
+│   ├── src/schema.ts     Drizzle table definitions (17 tables, FKs+indexes); migrations in server/drizzle/
 │   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
 │   │                     sessions/magic_links + per-user config + isolation + models + usage_events
 │   │                     + plans/credit (users.plan, token_quota) + invite_codes (D11)
@@ -243,6 +244,7 @@ senior-bro (npm workspace monorepo)
 │   │                     ChatOptions.webSearch → Anthropic web_search, D16; zero-usage→char-estimate fallback)
 │   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack, personalization.distill)
 │   │                     + guardrail frame + code-level claims/evidence + user-model blocks (R23/D2) + render*()
+│   ├── src/features.ts   per-feature model-routing registry (R35/D23): FEATURES[] + FeatureKey
 │   ├── src/skills.ts     loadSeedPacks(): reads skills/*.md — SEED ONLY (runtime packs live in company_packs, D10)
 │   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode); /packs/ensure generate-on-miss (D10);
 │                         /me/model read/correct/delete + post-interview distillUserModel() (D2 · Phase 4)

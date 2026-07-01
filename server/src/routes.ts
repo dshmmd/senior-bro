@@ -18,6 +18,7 @@ import {
   type OnDelta,
 } from './providers.js'
 import { computeProgress } from './progress.js'
+import { FEATURES, isFeatureKey, type FeatureKey } from './features.js'
 import {
   FIRST_MESSAGE_TRIGGER,
   PROMPT_SEEDS,
@@ -67,28 +68,46 @@ interface ResolvedCall {
   freeIntro: boolean
 }
 
-async function resolveCall(user: db.User): Promise<ResolvedCall> {
+/** Build a ResolvedCall from a curated model's config (host-funded, metered). */
+function hostCall(resolved: { cfg: AppConfig; option: db.ModelOption }, freeIntro: boolean): ResolvedCall {
+  return {
+    cfg: resolved.cfg,
+    modelId: resolved.option.id,
+    priceIn: resolved.option.price_in,
+    priceOut: resolved.option.price_out,
+    freeIntro,
+  }
+}
+
+/**
+ * Resolve which provider/model powers a call (pure — entitlement is separate). Pass `feature`
+ * (R35 / D23) to let an admin per-feature assignment override the global model choice for
+ * platform-funded calls; BYOK is never routed (the user's own key + cost).
+ */
+async function resolveCall(user: db.User, feature?: FeatureKey): Promise<ResolvedCall> {
+  const routedId = feature ? await db.assignedFeatureModel(feature) : null
+
   if (user.model_id !== null) {
-    const resolved = await db.modelConfig(user.model_id)
+    // Host plan: the user's curated model, unless the admin routed this feature elsewhere.
+    const routed = routedId ? await db.modelConfig(routedId) : null
+    const resolved = routed ?? (await db.modelConfig(user.model_id))
     if (!resolved?.option.enabled)
       throw new HttpError(409, 'your selected model is no longer available — pick another')
-    return {
-      cfg: resolved.cfg,
-      modelId: resolved.option.id,
-      priceIn: resolved.option.price_in,
-      priceOut: resolved.option.price_out,
-      freeIntro: false,
-    }
+    return hostCall(resolved, false)
   }
   const cfg = await db.getUserConfig(user.id)
   if (cfg) return { cfg, modelId: null, priceIn: 0, priceOut: 0, freeIntro: false }
-  // Hosted free-intro user with nothing configured: the platform's default model
+  // Hosted free-intro user with nothing configured: the per-feature model (or the global default)
   // powers their free onboarding (gated by the first-impression budget, enforced below).
   if (isHosted && user.plan === 'free-intro') {
-    const def = await db.defaultModel()
-    const mc = def ? await db.modelConfig(def.id) : null
-    if (def && mc)
-      return { cfg: mc.cfg, modelId: def.id, priceIn: def.price_in, priceOut: def.price_out, freeIntro: true }
+    const routed = routedId ? await db.modelConfig(routedId) : null
+    const resolved =
+      routed ??
+      (await (async () => {
+        const def = await db.defaultModel()
+        return def ? await db.modelConfig(def.id) : null
+      })())
+    if (resolved) return hostCall(resolved, true)
     throw new HttpError(409, 'No model is available yet — the admin needs to add one')
   }
   throw new HttpError(409, 'Not configured: set provider and API key first')
@@ -141,11 +160,11 @@ async function enforceEntitlement(
 async function requireCall(
   c: Context,
   kind: CallKind,
-  profileId?: number,
+  opts?: { profileId?: number; feature?: FeatureKey },
 ): Promise<{ user: db.User; call: ResolvedCall }> {
   const user = await requireUser(c)
-  const call = await resolveCall(user)
-  await enforceEntitlement(user, call, kind, profileId)
+  const call = await resolveCall(user, opts?.feature)
+  await enforceEntitlement(user, call, kind, opts?.profileId)
   return { user, call }
 }
 
@@ -307,6 +326,8 @@ const modelUpdateSchema = z.object({
 })
 
 const modelSelectSchema = z.object({ model_id: z.number().int().positive() })
+// null clears a feature's assignment (→ global default). (R35 / D23)
+const featureModelSchema = z.object({ model_id: z.number().int().positive().nullable() })
 const quotaSchema = z.object({ token_quota: z.number().int().min(0).nullable() })
 
 const planCheckoutSchema = z.object({
@@ -541,6 +562,23 @@ api.delete('/admin/models/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+// Per-feature model routing (R35 / D23): the feature catalogue + each feature's current assignment.
+api.get('/admin/feature-models', async (c) => {
+  await requireAdmin(c)
+  return c.json({ features: FEATURES, assignments: await db.listFeatureModels() })
+})
+
+// Assign a model to a feature (or clear it with model_id: null → falls back to the global default).
+api.put('/admin/feature-models/:key', async (c) => {
+  await requireAdmin(c)
+  const key = c.req.param('key')
+  if (!isFeatureKey(key)) throw new HttpError(404, 'unknown feature key')
+  const { model_id } = await parseBody(c, featureModelSchema)
+  if (model_id !== null && !(await db.getModel(model_id))) throw new HttpError(404, 'model not found')
+  await db.setFeatureModel(key, model_id)
+  return c.json({ ok: true })
+})
+
 api.get('/admin/users', async (c) => {
   await requireAdmin(c)
   const users = await db.listUsers()
@@ -656,7 +694,7 @@ api.patch('/admin/packs/:id', async (c) => {
 /** Re-draft a pack's body from scratch (e.g. when it's stale), keeping its slug/cache key. */
 api.post('/admin/packs/:id/regenerate', async (c) => {
   await requireAdmin(c)
-  const { user, call } = await requireCall(c, 'pack')
+  const { user, call } = await requireCall(c, 'pack', { feature: 'company.pack' })
   const pack = await db.getPack(Number(c.req.param('id')))
   if (!pack) throw new HttpError(404, 'pack not found')
   const role = pack.roles[0] ?? 'Engineer'
@@ -745,7 +783,7 @@ async function generatePack(
  * don't have it yet. Cached packs are reused across all users (the first namer pays the tokens).
  */
 api.post('/packs/ensure', async (c) => {
-  const { user, call } = await requireCall(c, 'pack')
+  const { user, call } = await requireCall(c, 'pack', { feature: 'company.pack' })
   const { company, role } = await parseBody(c, packEnsureSchema)
   const existing = await db.getPackBySlug(db.packSlug(company))
   if (existing?.status === 'published')
@@ -817,7 +855,7 @@ api.post('/calibration/start', async (c) => {
   const user = await requireUser(c)
   const { profile_id } = await parseBody(c, calibrationStartSchema)
   const profile = await ownProfile(user.id, profile_id)
-  const call = await resolveCall(user)
+  const call = await resolveCall(user, 'calibration')
   await enforceEntitlement(user, call, 'calibration', profile.id)
   const body = await db.activePromptBody('calibration.generate')
   const raw = await runModel(user, call, 'You generate interview calibration questions as JSON.', [
@@ -915,7 +953,7 @@ async function distillUserModel(
 }
 
 api.post('/interviews', async (c) => {
-  const { user, call } = await requireCall(c, 'interview')
+  const { user, call } = await requireCall(c, 'interview', { feature: 'interview.technical' })
   const body = await parseBody(c, interviewSchema)
   const profile = await ownProfile(user.id, body.profile_id)
 
@@ -953,7 +991,7 @@ api.post('/interviews', async (c) => {
 })
 
 api.post('/interviews/:id/messages', async (c) => {
-  const { user, call } = await requireCall(c, 'interview')
+  const { user, call } = await requireCall(c, 'interview', { feature: 'interview.technical' })
   const id = Number(c.req.param('id'))
   const interview = await ownInterview(user.id, id)
   if (interview.status !== 'active') throw new HttpError(409, 'interview already finished')
@@ -997,7 +1035,7 @@ api.post('/interviews/:id/messages', async (c) => {
 })
 
 api.post('/interviews/:id/finish', async (c) => {
-  const { user, call } = await requireCall(c, 'interview')
+  const { user, call } = await requireCall(c, 'interview', { feature: 'interview.technical' })
   const id = Number(c.req.param('id'))
   const interview = await ownInterview(user.id, id)
   if (interview.status === 'finished') return c.json(interview.report)
@@ -1030,7 +1068,10 @@ api.post('/interviews/:id/finish', async (c) => {
   )
   // Personalization (D2): re-distill the user model from the prior model + recent events + this
   // result, so the next interview "knows" the candidate. Best-effort — never fail finishing on it.
-  await distillUserModel(user, call, profile, report).catch((err: unknown) =>
+  // Routed to its own feature model (R35) — the interview is already authorized, so this reuses
+  // that entitlement and only swaps which model does the (cheap) summarization.
+  const distillCall = await resolveCall(user, 'personalization.distill').catch(() => call)
+  await distillUserModel(user, distillCall, profile, report).catch((err: unknown) =>
     console.error(JSON.stringify({ level: 'warn', msg: 'distill failed', error: String(err) })),
   )
   return c.json(report)

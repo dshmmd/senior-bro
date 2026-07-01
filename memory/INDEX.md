@@ -90,3 +90,9 @@ One entry per completed milestone. Read this before working on the repo.
   Plan page report N/3. **R36** `DELETE /api/profiles/:id` (cascades, frees a slot, 404 cross-user) +
   Dashboard ✕. Verified by `scripts/verify-ph23.mjs` (16 assertions). **Remaining Phase 23:** R35
   (per-feature model routing) then R31 (CV onboarding).
+- [2026-07-02 — R35: per-feature model routing (D23)](2026-07-02-r35-per-feature-model-routing.md) —
+  admin assigns a model per *feature* (`feature_models` migration 0010 + `server/src/features.ts`
+  registry); `resolveCall(user, feature?)` routes platform-funded calls (host + free-intro), **BYOK
+  never routed**, unassigned → global default. Admin "Feature model routing" UI + `GET/PUT
+  /api/admin/feature-models`. Verified by `scripts/verify-ph35.mjs` (routing proven via metering cost).
+  **Remaining Phase 23:** R31 (CV onboarding — routes CV parse through the new `resume.parse` feature).

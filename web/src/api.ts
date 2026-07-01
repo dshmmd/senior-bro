@@ -237,6 +237,12 @@ export interface InviteCode {
   created_at: string
 }
 
+export interface FeatureDef {
+  key: string
+  label: string
+  hint: string
+}
+
 export interface PromptCatalogEntry {
   key: string
   label: string
@@ -392,6 +398,13 @@ export const api = {
     post<InviteCode>('/admin/invites', m),
   adminRevokeInvite: (code: string) =>
     post<{ ok: boolean }>(`/admin/invites/${encodeURIComponent(code)}/revoke`, {}),
+  adminFeatureModels: () =>
+    request<{ features: FeatureDef[]; assignments: Record<string, number | null> }>('/admin/feature-models'),
+  adminSetFeatureModel: (key: string, model_id: number | null) =>
+    request<{ ok: boolean }>(`/admin/feature-models/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ model_id }),
+    }),
   adminListPrompts: () => request<PromptCatalogEntry[]>('/admin/prompts'),
   adminPromptVersions: (key: string) => request<PromptVersion[]>(`/admin/prompts/${encodeURIComponent(key)}`),
   adminSavePrompt: (key: string, body: string) =>

@@ -285,6 +285,16 @@ export const companyPacks = pgTable(
   (table) => [index('company_packs_status_idx').on(table.status)],
 )
 
+// Per-feature model routing (R35 / D23). Maps a feature key (see server/src/features.ts) to the
+// curated model that should power it. A feature with no row (or a null/disabled model) falls back
+// to the single global default (`models.is_default`), so behavior is unchanged until an admin
+// assigns one. `model_id` nulls out if the assigned model is deleted (→ falls back to default).
+export const featureModels = pgTable('feature_models', {
+  featureKey: text('feature_key').primaryKey(),
+  modelId: integer('model_id').references(() => models.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
+})
+
 // Admin-minted invite codes (D11 / Phase 13). Each carries a token-denominated credit
 // (Q3); redeeming adds it to the redeemer's quota and upgrades them to the 'host' plan.
 // Single-use: `redeemedBy`/`redeemedAt` are set once; `revoked` blocks an unused code.

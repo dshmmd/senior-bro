@@ -3,6 +3,7 @@ import {
   api,
   type AdminUserRow,
   type CompanyPack,
+  type FeatureDef,
   type InviteCode,
   type ModelOption,
   type PromptCatalogEntry,
@@ -27,6 +28,8 @@ export function Admin({ onBack }: { onBack: () => void }) {
   const [models, setModels] = useState<ModelOption[]>([])
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [invites, setInvites] = useState<InviteCode[]>([])
+  const [features, setFeatures] = useState<FeatureDef[]>([])
+  const [featureAssignments, setFeatureAssignments] = useState<Record<string, number | null>>({})
   const [form, setForm] = useState({ ...blankForm })
   const [invite, setInvite] = useState({ token_credit: 500_000, note: '', expires_in_days: '' })
   const [busy, setBusy] = useState(false)
@@ -34,14 +37,17 @@ export function Admin({ onBack }: { onBack: () => void }) {
 
   const load = async () => {
     try {
-      const [m, u, i] = await Promise.all([
+      const [m, u, i, f] = await Promise.all([
         api.adminListModels(),
         api.adminListUsers(),
         api.adminListInvites(),
+        api.adminFeatureModels(),
       ])
       setModels(m)
       setUsers(u)
       setInvites(i)
+      setFeatures(f.features)
+      setFeatureAssignments(f.assignments)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -85,6 +91,14 @@ export function Admin({ onBack }: { onBack: () => void }) {
   }
   const remove = async (m: ModelOption) => {
     await api.adminDeleteModel(m.id).catch(() => undefined)
+    await load()
+  }
+  // R35: route a feature to a specific model (empty selection → global default).
+  const assignFeature = async (key: string, value: string) => {
+    const modelId = value === '' ? null : Number(value)
+    await api
+      .adminSetFeatureModel(key, modelId)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
     await load()
   }
   const setQuota = async (u: AdminUserRow) => {
@@ -278,6 +292,46 @@ export function Admin({ onBack }: { onBack: () => void }) {
             {busy ? 'Validating key…' : 'Add model'}
           </button>
         </div>
+      </div>
+
+      <h2>Feature model routing</h2>
+      <div className="card">
+        <p className="sub" style={{ marginTop: 0 }}>
+          Pick which model powers each feature (R35). Leave one on <b>Global default</b> to use the default
+          model above — cheap/fast models suit onboarding, stronger ones the interview itself.
+        </p>
+        <table className="data-table" style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Model</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((f) => (
+              <tr key={f.key}>
+                <td>
+                  <b>{f.label}</b>
+                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.hint}</div>
+                </td>
+                <td>
+                  <select
+                    value={featureAssignments[f.key] ?? ''}
+                    onChange={(e) => void assignFeature(f.key, e.target.value)}
+                  >
+                    <option value="">Global default</option>
+                    {models.map((m) => (
+                      <option key={m.id} value={m.id} disabled={!m.enabled}>
+                        {m.label}
+                        {m.enabled ? '' : ' (disabled)'}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <h2>Users &amp; usage</h2>
