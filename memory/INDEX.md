@@ -83,3 +83,10 @@ One entry per completed milestone. Read this before working on the repo.
   4 `skills/*.md` now seed-only (`loadSeedPacks`); admin "Company packs" review queue (edit/publish/
   regenerate/delete + staleness); `company.pack` versioned prompt. R14 done. Packs auto-use; admin = post-hoc QC.
   Next = **Phase 16 (voice, ~closed) or Phase 17 R22/R23**.
+- [2026-07-02 — Phase 23 (partial): first-impression free tier + delete profile](2026-07-02-phase23-first-impression-free-tier.md) —
+  **R32** redefines the free tier: 3 shared "first impressions" per user, tied to profiles via
+  `profiles.first_impression_at` (migration 0009); `enforceEntitlement(profileId)` consumes/checks the
+  slot (ownership verified first); re-checking a position never re-burns; `/api/usage` +
+  Plan page report N/3. **R36** `DELETE /api/profiles/:id` (cascades, frees a slot, 404 cross-user) +
+  Dashboard ✕. Verified by `scripts/verify-ph23.mjs` (16 assertions). **Remaining Phase 23:** R35
+  (per-feature model routing) then R31 (CV onboarding).

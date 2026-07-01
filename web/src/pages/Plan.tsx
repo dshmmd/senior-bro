@@ -76,7 +76,7 @@ export function Plan({ onDone, onChooseByok }: { onDone: () => void; onChooseByo
     <>
       <h1>Choose how to continue</h1>
       <p className="sub">
-        Your free level-check is done 🎉 To run full interviews, pick a plan. You can switch later in
+        Your free first impression is done 🎉 To run full interviews, pick a plan. You can switch later in
         settings.
       </p>
 
@@ -86,6 +86,14 @@ export function Plan({ onDone, onChooseByok }: { onDone: () => void; onChooseByo
             <div style={{ color: 'var(--muted)', fontSize: 12 }}>Plan</div>
             <b>{usage.plan}</b>
           </div>
+          {usage.plan === 'free-intro' && (
+            <div>
+              <div style={{ color: 'var(--muted)', fontSize: 12 }}>Free first impressions</div>
+              <b>
+                {usage.first_impressions_used} / {usage.first_impressions_limit} used
+              </b>
+            </div>
+          )}
           <div>
             <div style={{ color: 'var(--muted)', fontSize: 12 }}>Credit left</div>
             <b>{usage.credit_left !== null ? `${fmt(usage.credit_left)} tokens` : '—'}</b>

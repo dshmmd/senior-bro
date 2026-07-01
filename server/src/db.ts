@@ -61,6 +61,7 @@ export interface Profile {
   notes: string | null
   level: string | null
   level_summary: string | null
+  first_impression_at: string | null
   created_at: string
 }
 
@@ -218,6 +219,7 @@ function toProfile(r: ProfileRow): Profile {
     notes: r.notes,
     level: r.level,
     level_summary: r.levelSummary,
+    first_impression_at: r.firstImpressionAt,
     created_at: r.createdAt,
   }
 }
@@ -294,6 +296,41 @@ export async function getProfile(id: number): Promise<Profile | null> {
 
 export async function setProfileLevel(id: number, level: string, summary: string): Promise<void> {
   await db.update(t.profiles).set({ level, levelSummary: summary }).where(eq(t.profiles.id, id))
+}
+
+/**
+ * Delete a profile and everything under it (R36). Child rows (interviews, weaknesses, skill
+ * claims, events, calibrations, user model) cascade at the DB via their `profile_id` FKs; the
+ * `users.active_profile_id` FK is `set null` on delete, so `activeProfile()` falls back to the
+ * user's latest remaining profile. Caller must have verified ownership of `profileId`.
+ */
+export async function deleteProfile(profileId: number): Promise<void> {
+  await db.delete(t.profiles).where(eq(t.profiles.id, profileId))
+}
+
+// ── free-tier "first impression" accounting (R32 / D21) ──────────────
+
+/** How many of the user's profiles have consumed a free "first impression" credit. */
+export async function firstImpressionCount(userId: number): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(t.profiles)
+    .where(and(eq(t.profiles.userId, userId), sql`${t.profiles.firstImpressionAt} is not null`))
+  return row?.n ?? 0
+}
+
+/**
+ * Mark a profile as having spent a first-impression credit (idempotent — only sets the timestamp
+ * if it's still null, so re-checking the same position never re-burns). Returns true if this call
+ * consumed the credit, false if it was already consumed.
+ */
+export async function consumeFirstImpression(profileId: number): Promise<boolean> {
+  const res = await db
+    .update(t.profiles)
+    .set({ firstImpressionAt: new Date().toISOString() })
+    .where(and(eq(t.profiles.id, profileId), sql`${t.profiles.firstImpressionAt} is null`))
+    .returning({ id: t.profiles.id })
+  return res.length > 0
 }
 
 // ── calibrations ─────────────────────────────────────────────────────

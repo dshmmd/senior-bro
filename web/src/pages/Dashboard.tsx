@@ -70,6 +70,23 @@ export function Dashboard({
       .catch(() => undefined)
   }
 
+  // R36: delete a position + all its history. Frees a free-tier "first impression" slot (R32).
+  const deleteProfile = (id: number, label: string) => {
+    if (
+      !window.confirm(
+        `Delete "${label}" and all of its interviews, weaknesses and progress? This can't be undone, but it frees a free-tier slot.`,
+      )
+    )
+      return
+    void api
+      .deleteProfile(id)
+      .then(() => {
+        setProfiles((ps) => ps.filter((p) => p.id !== id))
+        onProfileSwitched()
+      })
+      .catch(() => undefined)
+  }
+
   if (openReport !== null) return <ReportView interviewId={openReport} onBack={() => setOpenReport(null)} />
 
   return (
@@ -86,15 +103,25 @@ export function Dashboard({
         <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           <span style={{ color: 'var(--muted)', fontSize: 13 }}>Profiles:</span>
           {profiles.map((p) => (
-            <button
-              key={p.id}
-              className={p.id === profile.id ? '' : 'secondary'}
-              onClick={() => switchProfile(p.id)}
-              title={p.company ?? undefined}
-            >
-              {p.role}
-              {p.level ? ` · ${p.level}` : ''}
-            </button>
+            <span key={p.id} className="row" style={{ gap: 2, alignItems: 'center' }}>
+              <button
+                className={p.id === profile.id ? '' : 'secondary'}
+                onClick={() => switchProfile(p.id)}
+                title={p.company ?? undefined}
+              >
+                {p.role}
+                {p.level ? ` · ${p.level}` : ''}
+              </button>
+              <button
+                className="ghost"
+                title="Delete this position and its history"
+                aria-label={`Delete ${p.role}`}
+                onClick={() => deleteProfile(p.id, p.role)}
+                style={{ padding: '2px 6px' }}
+              >
+                ✕
+              </button>
+            </span>
           ))}
           <button className="ghost" onClick={onNewProfile}>
             + New

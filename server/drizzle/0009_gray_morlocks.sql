@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "first_impression_at" timestamp;

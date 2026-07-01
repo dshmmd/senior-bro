@@ -32,14 +32,26 @@ import {
 
 export const api = new Hono()
 
-/** The platform-funded free level-check budget (tokens) for `free-intro` users (D11). */
-const FREE_INTRO_TOKEN_BUDGET = 30_000
+/**
+ * Free tier (R32 / D21): a `free-intro` user gets a shared lifetime budget of
+ * FREE_IMPRESSION_LIMIT "first impressions" — one per profile/position they onboard.
+ * Each first impression covers that profile's free onboarding actions (company-knowledge,
+ * first-knowledge build, calibration). Full interviews stay plan-gated. (Redefines the old
+ * unconditional 30k-token level-check budget from Phase 13.)
+ */
+const FREE_IMPRESSION_LIMIT = 3
 
 /** Token packs the mocked checkout sells (real Stripe/crypto is Phase 8). */
 const CREDIT_PACKS = [100_000, 500_000, 1_000_000] as const
 
-/** What a model call is for — gates which plans may make it (D11). */
+/**
+ * What a model call is for — gates which plans may make it (D11/D21). The onboarding kinds
+ * ('calibration' | 'pack') draw from the free "first impression" budget; 'interview' never does.
+ */
 type CallKind = 'calibration' | 'interview' | 'pack'
+
+/** The onboarding call kinds that a free "first impression" credit covers (R32). */
+const FIRST_IMPRESSION_KINDS: readonly CallKind[] = ['calibration', 'pack']
 
 /**
  * A resolved model call: which provider/key to use, plus the metering metadata
@@ -71,7 +83,7 @@ async function resolveCall(user: db.User): Promise<ResolvedCall> {
   const cfg = await db.getUserConfig(user.id)
   if (cfg) return { cfg, modelId: null, priceIn: 0, priceOut: 0, freeIntro: false }
   // Hosted free-intro user with nothing configured: the platform's default model
-  // powers their free level-check (capped by FREE_INTRO_TOKEN_BUDGET, enforced below).
+  // powers their free onboarding (gated by the first-impression budget, enforced below).
   if (isHosted && user.plan === 'free-intro') {
     const def = await db.defaultModel()
     const mc = def ? await db.modelConfig(def.id) : null
@@ -83,20 +95,42 @@ async function resolveCall(user: db.User): Promise<ResolvedCall> {
 }
 
 /**
- * Entitlement gate (D11), hosted mode only — local mode is always unrestricted.
+ * Entitlement gate (D11/D21), hosted mode only — local mode is always unrestricted.
  * - BYOK/CLI (user's own key): free, never blocked.
- * - free-intro on the platform default model: calibration only, under the free budget.
+ * - free-intro on the platform default model: onboarding actions only, drawing from the shared
+ *   "first impression" budget (R32). Full interviews are always plan-gated.
  * - paid host model: requires remaining token credit (`tokens_used < token_quota`).
+ *
+ * For a free-intro onboarding call scoped to a profile, this *consumes* a first-impression credit
+ * on first touch (idempotent — a profile already onboarded stays free, so re-checking a position
+ * never re-burns). Pass `profileId` for profile-scoped actions (calibration); omit it for the
+ * pre-profile company-pack lookup, which is allowed as long as the user still has a free slot.
  */
-async function enforceEntitlement(user: db.User, call: ResolvedCall, kind: CallKind): Promise<void> {
+async function enforceEntitlement(
+  user: db.User,
+  call: ResolvedCall,
+  kind: CallKind,
+  profileId?: number,
+): Promise<void> {
   if (!isHosted) return
   if (call.modelId === null) return
   if (call.freeIntro) {
-    // Free intro covers onboarding (the level quiz + company-pack research), not full interviews.
-    if (kind === 'interview')
-      throw new HttpError(402, 'Pick a plan to start interviews — the free check covers the level quiz only')
-    if ((await db.tokensUsed(user.id)) >= FREE_INTRO_TOKEN_BUDGET)
-      throw new HttpError(402, 'Your free level-check is used up — choose a plan to keep going')
+    // The free tier covers onboarding a position, never a full interview.
+    if (!FIRST_IMPRESSION_KINDS.includes(kind))
+      throw new HttpError(402, 'Pick a plan to start interviews — the free tier covers onboarding only')
+    // A profile that already spent a first impression keeps its onboarding free forever.
+    if (profileId !== undefined) {
+      const profile = await db.getProfile(profileId)
+      if (profile?.first_impression_at) return
+    }
+    if ((await db.firstImpressionCount(user.id)) >= FREE_IMPRESSION_LIMIT)
+      throw new HttpError(
+        402,
+        `You've used your ${FREE_IMPRESSION_LIMIT} free first impressions — delete a position or pick a plan to add more`,
+      )
+    // Consume the slot on the profile-scoped action (calibration). The pre-profile pack lookup
+    // doesn't consume — the calibration on the profile it's for will.
+    if (profileId !== undefined) await db.consumeFirstImpression(profileId)
     return
   }
   if (user.token_quota === null || (await db.tokensUsed(user.id)) >= user.token_quota)
@@ -104,10 +138,14 @@ async function enforceEntitlement(user: db.User, call: ResolvedCall, kind: CallK
 }
 
 /** Resolve the requesting user + their model call, enforcing entitlement (401/402/409). */
-async function requireCall(c: Context, kind: CallKind): Promise<{ user: db.User; call: ResolvedCall }> {
+async function requireCall(
+  c: Context,
+  kind: CallKind,
+  profileId?: number,
+): Promise<{ user: db.User; call: ResolvedCall }> {
   const user = await requireUser(c)
   const call = await resolveCall(user)
-  await enforceEntitlement(user, call, kind)
+  await enforceEntitlement(user, call, kind, profileId)
   return { user, call }
 }
 
@@ -414,13 +452,16 @@ api.post('/models/select', async (c) => {
 api.get('/usage', async (c) => {
   const user = await requireUser(c)
   const tokensUsed = await db.tokensUsed(user.id)
+  const impressionsUsed = await db.firstImpressionCount(user.id)
   return c.json({
     usage: await db.usageSummary(user.id),
     plan: user.plan,
     token_quota: user.token_quota,
     tokens_used: tokensUsed,
     credit_left: user.token_quota !== null ? Math.max(0, user.token_quota - tokensUsed) : null,
-    free_intro_budget: FREE_INTRO_TOKEN_BUDGET,
+    // Free-tier "first impression" budget (R32) — replaces the old flat token budget.
+    first_impressions_used: impressionsUsed,
+    first_impressions_limit: FREE_IMPRESSION_LIMIT,
   })
 })
 
@@ -757,12 +798,27 @@ api.post('/profiles/:id/select', async (c) => {
   return c.json({ ok: true })
 })
 
+// Delete a profile/position and all its history (R36). Cascades to interviews, weaknesses,
+// skill claims, events, calibrations and the user model at the DB. Frees a first-impression
+// slot (R32) since the deleted profile's `first_impression_at` goes with it.
+api.delete('/profiles/:id', async (c) => {
+  const user = await requireUser(c)
+  const profile = await ownProfile(user.id, Number(c.req.param('id')))
+  await db.deleteProfile(profile.id)
+  const active = await db.activeProfile(user.id)
+  return c.json({ ok: true, active_profile_id: active?.id ?? null })
+})
+
 // ── calibration ─────────────────────────────────────────────────────
 
 api.post('/calibration/start', async (c) => {
-  const { user, call } = await requireCall(c, 'calibration')
+  // Verify ownership BEFORE the entitlement check so a first-impression credit is only ever
+  // consumed against the caller's own profile (R32).
+  const user = await requireUser(c)
   const { profile_id } = await parseBody(c, calibrationStartSchema)
   const profile = await ownProfile(user.id, profile_id)
+  const call = await resolveCall(user)
+  await enforceEntitlement(user, call, 'calibration', profile.id)
   const body = await db.activePromptBody('calibration.generate')
   const raw = await runModel(user, call, 'You generate interview calibration questions as JSON.', [
     { role: 'user', content: renderCalibrationGenerate(body, profile) },
@@ -773,11 +829,14 @@ api.post('/calibration/start', async (c) => {
 })
 
 api.post('/calibration/submit', async (c) => {
-  const { user, call } = await requireCall(c, 'calibration')
+  const user = await requireUser(c)
   const { calibration_id, answers } = await parseBody(c, calibrationSubmitSchema)
   const calibration = await db.getCalibration(calibration_id)
   if (!calibration) throw new HttpError(404, 'calibration not found')
   const profile = await ownProfile(user.id, calibration.profile_id)
+  const call = await resolveCall(user)
+  // Idempotent: the matching /start already consumed this profile's first impression.
+  await enforceEntitlement(user, call, 'calibration', profile.id)
   const body = await db.activePromptBody('calibration.grade')
   const raw = await runModel(user, call, 'You grade interview calibration quizzes as JSON.', [
     {

@@ -221,7 +221,9 @@ export interface UsageInfo {
   token_quota: number | null
   tokens_used: number
   credit_left: number | null
-  free_intro_budget: number
+  // Free-tier "first impression" budget (R32): how many of the shared 3 the user has spent.
+  first_impressions_used: number
+  first_impressions_limit: number
 }
 
 export interface InviteCode {
@@ -303,6 +305,8 @@ export const api = {
   getProfile: () => request<Profile | null>('/profile'),
   listProfiles: () => request<{ profiles: ProfileListItem[]; active_profile_id: number | null }>('/profiles'),
   selectProfile: (id: number) => post<{ ok: boolean }>(`/profiles/${id}/select`, {}),
+  deleteProfile: (id: number) =>
+    request<{ ok: boolean; active_profile_id: number | null }>(`/profiles/${id}`, { method: 'DELETE' }),
   createProfile: (p: {
     role: string
     company?: string

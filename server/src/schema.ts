@@ -81,6 +81,12 @@ export const profiles = pgTable(
     notes: text('notes'),
     level: text('level'),
     levelSummary: text('level_summary'),
+    // Free-tier accounting (R32 / D21): set the first time a free-intro user spends a free
+    // onboarding action ("first impression") on this profile — resume-check, company-knowledge,
+    // first-knowledge build, or calibration. Once set it's free forever (re-checking the same
+    // position never re-burns); a user may hold at most FREE_IMPRESSION_LIMIT profiles with it set.
+    // Deleting the profile (R36) frees the slot. `null` = this profile hasn't consumed a credit.
+    firstImpressionAt: timestamp('first_impression_at', { mode: 'string' }),
     createdAt: createdAt(),
   },
   (t) => [index('profiles_user_id_idx').on(t.userId)],

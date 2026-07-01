@@ -51,6 +51,9 @@ card — for testers, partners, and early users. See D11.
 | D18 | **Versioned natural-language records + lazy per-user LLM migration** (2026-06-27, answers R27): store gathered NL data as **structured records with natural-language values + a `schema_version`** (Postgres **JSONB**, one datastore per D9). On a schema change, migrate **lazily and per-user on first touch after the release** — prefer deterministic/mechanical transforms; call **our host API** (never the user's models/keys) only for genuine *semantic* reshapes, with a dedicated migration prompt; idempotent, backgroundable. **Chosen over RAG**, which is a *retrieval* technique, not a storage/migration strategy (you'd still have to store + migrate the underlying data); Elastic/vector DB deferred to a future retrieval feature. | Owner's worry is a cheap path off today's schema without bulk re-encoding everything through a model. Lazy per-user migration means only active users' data moves, once, on demand; JSONB keeps schema flexibility without a second datastore; most migrations need no model at all |
 | D20 | **Accent-aware voice upgrade = server-side STT via an OpenAI-compatible gateway (AvalAI)** (2026-06-27, refines D17): when we move beyond browser Web Speech STT, prefer a **dedicated transcription endpoint** (AvalAI `POST /v1/audio/transcriptions`, Whisper / `gpt-4o-transcribe`) — audio → text on our server → editable transcript → *any* chat model. **Model-agnostic & robust:** independent of which model/gateway runs the interview, so it sidesteps the "does this gateway forward audio to this model" question. **AvalAI** is OpenAI-compatible (`https://api.avalai.ir/v1`, standard `Bearer` auth, standard endpoints) → its chat side drops into the D19 configurable-base-URL seam (even simpler than Arvan: no per-model gateway token, no `apikey` scheme). **Native audio-in** (multimodal `input_audio` to gpt-4o-audio / Gemini, incl. Gemini-on-Arvan) stays **deferred** and **gated on a live per-gateway passthrough test** — our provider currently sends text-only content, and gateways often proxy text only. | Owner is evaluating AvalAI/Arvan for audio; server-side STT gives the accent win without coupling to a specific model's multimodal support or a gateway's audio passthrough, and reuses the metering/provider seam we already built |
 | D19 | **ArvanCloud AIaaS is an OpenAI-compatible host provider** (2026-06-27, answers the Arvan-usage question for R25/R26): integrate Arvan via the existing `openai` provider path with a **per-model configurable base URL** (currently hard-coded to `api.openai.com`). OpenAI-compatible chat completions return a `usage` object (`prompt_tokens`/`completion_tokens`), which our provider already parses — **including on streamed calls** (`stream_options.include_usage`, already set). So with Arvan's **per-MTok input/output prices** in the `models` table, `runModelFull` already computes `cost = inTok/1e6·priceIn + outTok/1e6·priceOut` — **usage + cost are automatic; the only code gap is the configurable base URL.** Caveat: confirm Arvan returns `usage` on streamed responses; if not, fall back to the char-estimate. | Reuses the whole metering/quota stack with one small change; avoids a bespoke provider; keeps cost accounting exact for a per-MTok-priced provider |
+| D21 | **Free tier = one shared "first impression" credit, 3 per verified user** (2026-07-02, redefines D11/R18's "free level-check for everyone"): resume-check, company/target-knowledge lookup-or-generation, first-knowledge-build (user-model bootstrap), and calibration all draw from **one shared lifetime counter of 3** per email-verified user. Touching any one of them — even partially, even if the user doesn't finish it — burns 1 of the 3; it's not 1-free-use-per-action-type. After 3, those actions require a plan (host pay-as-you-go credit / BYOK / local CLI), same gate full interviews & weakness-drilling already sit behind (unchanged). | Owner: these are all "first impression" actions on the same free budget, not independent unlimited freebies — caps host-token spend on exploration while still letting a curious user meaningfully try the product before paying |
+| D22 | **Interview "domain" is a first-class, extensible dimension** (2026-07-02, answers the technical+HR ask; renamed from an earlier "kind" wording because `interviews.kind` already means `full`/`coaching` in the schema — this is a **separate** column): interviews carry a domain (starts with `technical`, `hr`); each domain has its own versioned system prompt key (rides the D12 prompt-versioning infra, e.g. `interview.technical.system` / `interview.hr.system`) and its own gamification constellation (extends D7/Phase 6). Adding a new domain later is a registry entry, not a code branch rewrite. A domain's constellation/dashboard section stays hidden until the user has evidence for it — no empty HR constellation for a user with zero HR interviews, and vice versa. | Owner wants HR interviews alongside technical, with room to add more kinds later without rearchitecting; per-domain prompts + per-domain constellations keep kinds independent so shipping a new one never risks the others |
+| D23 | **Admin assigns a model per feature/purpose, not one global default** (2026-07-02, answers "which model should power which action"): extend the admin model catalog (R13/Phase 9) with a **feature-key → model** mapping (mirrors the D12 `prompt_key` pattern) — e.g. `resume.parse`, `knowledge.first`, `calibration`, `company.pack`, `interview.technical`, `interview.hr`, `personalization.distill` — each resolves to an explicitly-assigned model or falls back to the single global default (today's `models.is_default`) when unset, so existing behavior needs zero admin action to keep working. | Owner wants cheap/fast models on cheap actions (resume parse, calibration) and stronger models where quality matters (interviews); one global default can't express that |
 
 > **North star (owner, 2026-06-25):** "requirements are not god's words — use your
 > creativity; the goal is an *easy-to-use service for people who want to learn*, built to
@@ -187,6 +190,8 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
   or finish Phase 4 with capability tiers).
 
 ### Phase 5 — Resume & opportunity pipeline
+> **R31 (owner 2026-07-02, Phase 23) specifies the first bullet below**: CV upload + LLM extraction
+> becomes the *default* onboarding path (manual Q&A is the fallback/edit path), not just an added option.
 - [ ] Resume intake (PDF/text upload → parsed into profile) or guided resume *builder* interview
 - [ ] Resume improvement loop driven by interview evidence ("you said X in interviews — your resume undersells it")
 - [ ] Job discovery: web search for live openings in the user's country/role; match-scored against profile
@@ -314,6 +319,11 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 - Verified: `make check` + `make e2e` (local) green; hosted gating proven end-to-end by
   `scripts/verify-ph13.mjs` (free check → 402 paywall → redeem → select model → metered interview).
 - **Gate: owner reviews before Phase 14 (admin-managed versioned prompts + guardrails).**
+- **Follow-up (owner 2026-07-02, D21/R32):** the free-intro rule changes from "unlimited free
+  calibration" to a **shared 3-per-user "first impression" credit** covering resume-check,
+  company/knowledge lookup-or-generation, first-knowledge-build, and calibration — touching any one
+  (even partially) burns 1 of 3. Needs a new per-user counter + an `enforceEntitlement` update. Full
+  interviews/coaching stay paid-host-credit / BYOK / local-CLI, unchanged. Tracked in **Phase 23**.
 
 ### Phase 14 — Admin-managed versioned prompts + guardrails (D12, D13) ✅ (2026-06-26)
 - [x] Moved prompts from `server/src/prompts.ts` constants into a DB table (`prompts`,
@@ -442,6 +452,62 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 ### Phase 22 — Observability: Prometheus + Grafana on Arvan (R29)
 - [ ] `/metrics` endpoint (app + runtime + usage: token burn, cost, latency, errors, active users).
 - [ ] Prometheus + Grafana in the cluster; ship starter dashboards + alerts. Follows Phase 21.
+
+---
+
+## Phases 23–24 — owner additions 2026-07-02 (R31–R34)
+
+> Theme: CV-first onboarding, a capped shared free tier, and multiple interview kinds (technical + HR,
+> extensible) with their own prompts and gamification. **Recommended order:** 23 first — it touches
+> onboarding and the free-tier gate everything else sits behind — then 24, which is net-new and
+> independent but reads better once onboarding is CV-first.
+
+### Phase 23 — CV-first onboarding + shared free-tier credit (R31, R32, R35, R36, D21, D23)
+- [ ] R31: CV upload (PDF/text) → LLM extraction into profile fields (job target, company/tier,
+      technologies, seniority signals); manual Q&A becomes the fallback/edit path, not the default.
+      No format/provider constraint from the owner — accept PDF at minimum; which model parses it is
+      an R35 per-feature routing choice, not hardcoded.
+- [x] **R32: Shared 3-per-user "first impression" free tier** ✅ (2026-07-02). Redefines Phase 13's
+      unconditional 30k-token free level-check (D21): a `free-intro` user now gets `FREE_IMPRESSION_LIMIT`
+      (3) free first impressions, one per **profile/position** they onboard. Implementation ties the
+      credit to the profile: `profiles.first_impression_at` (migration 0009) is set the first time a
+      free onboarding action (calibration today; resume/company-knowledge fold in with R31) runs on that
+      profile. Already-set profiles stay free forever (re-checking a position never re-burns);
+      `firstImpressionCount(user) >= 3` → 402. `enforceEntitlement` now takes the profile id and
+      consumes/checks the slot (ownership verified first so a credit can't be spent on another user's
+      profile). Full interviews stay plan-gated. `/api/usage` reports `first_impressions_used/limit`;
+      Plan page shows "N/3 used". Locked by `scripts/verify-ph23.mjs` (16 assertions, hosted mock).
+- [x] **R36: `DELETE /api/profiles/:id`** ✅ (2026-07-02). Deletes a profile/position; children
+      (interviews, weaknesses, skill-claims, events, calibrations, user-model) cascade at the DB via
+      `profile_id`; `users.active_profile_id` nulls out so `activeProfile()` falls back to the latest.
+      Dashboard shows a per-profile delete (✕) with a confirm; deleting frees a first-impression slot
+      (R32). Cross-user delete is a 404 (isolation intact — proven in `verify-ph23.mjs`).
+- [ ] R35: Per-feature model routing (D23) — groundwork, not a hard blocker (falls back to today's
+      single global default if the admin assigns nothing per-feature).
+- **Sub-gate (2026-07-02):** R32 + R36 shipped & verified — the free-tier business-model change (the
+  owner's stated conflict-resolution priority) + delete. Remaining Phase 23 work: R35 then R31 (CV).
+- **Gate:** owner reviews the free-tier UX (how "2 of 3 first impressions left" is communicated, and
+  the delete-position confirmation copy) before it ships.
+
+### Phase 24 — Interview kinds: technical + HR, extensible (R33, R34, D22)
+- [ ] R33: a domain field on interviews (`technical` seed, `hr` new) — **a new column**, not the
+      existing `interviews.kind` (already `full`/`coaching`, unrelated — don't overload it). User
+      picks a domain when starting; each domain gets its own versioned system prompt key (rides D12)
+      — adding a domain later is a registry entry, not a rewrite.
+- [ ] **HR prompt structure** (owner 2026-07-02) — three question pools composed per session, not
+      exhaustively asked from each (keeps the interview from ballooning in length):
+      1. **Fixed core** — present in every HR interview (opening rapport-building, closing/wrap-up).
+      2. **General pool** — universal HR topics (conflict resolution, teamwork, motivation, etc.) —
+         a **random subset** sampled each session.
+      3. **Company-specific pool** — culture/values questions sourced from the target's company pack
+         — **deterministic, not random** (drawn when the profile has a company pack; skipped otherwise).
+- [ ] R7 (weakness detection) and R23 (evidence-gated skill claims) **apply to HR exactly as they do
+      to technical** (owner 2026-07-02: "should be applied like in tech it did") — same mechanism,
+      HR-flavored content, no separate scoring axes.
+- [ ] R34: Per-domain gamification constellation (extends D7/Phase 6); a domain's constellation/
+      dashboard section is hidden until the user has evidence for it (no empty HR constellation for a
+      technical-only user, and vice versa).
+- **Gate:** owner reviews the actual HR general-question pool + company-specific tie-in before ship.
 
 ---
 

@@ -27,6 +27,13 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > (R25/D19): `arvan` OpenAI-compatible provider with per-model gateway base URL + `apikey` auth; usage
 > metered from prompt/completion tokens with a zero-usage fallback. Owner additions **R26–R29** (admin
 > dashboard upgrade, NL-store lazy migration D18, k8s deploy, Prometheus/Grafana) are queued.
+> **Owner additions 2026-07-02 (R31–R36, D21/D22/D23, Phases 23–24).** **Phase 23 partial ✅:**
+> **R32** (shared 3-per-user "first impression" free tier, redefining R18's unlimited free calibration)
+> + **R36** (delete a profile/position + its history, which frees a first-impression slot) shipped &
+> verified 2026-07-02 (`profiles.first_impression_at` migration 0009; `scripts/verify-ph23.mjs`).
+> **Remaining Phase 23:** R35 (per-feature admin model routing, D23) then R31 (CV-first onboarding).
+> **Phase 24 queued:** interview kinds/domains (technical + HR, extensible) with per-domain prompts +
+> gamification constellations (R33/R34/D22). See ROADMAP Phases 23–24.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -174,6 +181,40 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   endpoint (**AvalAI** `/v1/audio/transcriptions`, Whisper/`gpt-4o-transcribe`) → editable transcript →
   any chat model. Model-agnostic; native audio-in (gpt-4o-audio/Gemini) stays a later, passthrough-gated
   option. **Owner deciding the provider — build deferred until they confirm.** (D20, refines D17)
+
+### Owner additions 2026-07-02 (R31–R36) — CV onboarding, first-impression free tier, interview kinds
+- [ ] R31: **CV-first onboarding** — upload a resume (PDF/text); LLM extracts job target, company/tier,
+  technologies, and seniority signals straight into the profile, replacing manual Q&A as the default
+  onboarding path (manual entry stays as a fallback/edit). Extends the unstarted Phase 5 resume-intake
+  item. (Phase 5 / Phase 23)
+- [x] R32: **Shared "first impression" free-tier credit** — resume-check, company/target-knowledge
+  lookup-or-generation, first-knowledge-build (user-model bootstrap), and calibration all draw from
+  **one shared lifetime counter of 3 per email-verified user** — touching any one of them, even
+  partially, burns 1 of the 3, not 1-per-action-type. **Redefines R18's "free level-check for
+  everyone"** (today unconditional/uncapped) into a capped shared budget. Full interviews and
+  weakness-drilling remain unchanged: paid host credit / BYOK / local CLI, same as Phase 13 today.
+  Shipped 2026-07-02: `profiles.first_impression_at` (migration 0009), `FREE_IMPRESSION_LIMIT=3`,
+  `enforceEntitlement(profileId)` consumes/checks per-profile, `/api/usage` reports the budget,
+  Plan page shows N/3. Verified by `scripts/verify-ph23.mjs`. (D21 · Phase 23)
+- [ ] R33: **Interview kinds (technical + HR, extensible)** — interviews carry a `kind`; each kind has
+  its own versioned system prompt (rides the D12 prompt-versioning infra), so adding a new kind later
+  is a registry entry, not a code rewrite. Technical = today's flow, unchanged. HR = new
+  behavioral/culture-fit-focused kind. (D22 · Phase 24)
+- [ ] R34: **Per-kind constellation + conditional display** — the gamification constellation
+  (D7/Phase 6) becomes per-interview-kind; a kind's constellation/dashboard section stays hidden until
+  the user has at least one interview of that kind (no empty HR constellation for a technical-only
+  user, and vice versa). (D22 · Phase 24)
+- [ ] R35: **Per-feature model selection (admin)** — replace the single global "default model" (today
+  powers every free-intro call — calibration, company-pack research, distillation) with a **model
+  chosen per feature/purpose** (e.g. resume-parse, first-knowledge-build, calibration, company-pack,
+  technical interview, HR interview, distillation), each falling back to the global default when
+  unset. Extends R13's admin model catalog (`server/src/routes.ts` `defaultModel()`/`resolveCall`).
+  (D23 · Phase 19)
+- [x] R36: **Delete a profile/position (+ its history)** — a user can delete one of their profiles
+  (R24); the delete cascades to its interviews/weaknesses/skill-claims/events/user-model. This is how
+  a user frees up a burned first-impression slot (R32) without it auto-resetting. Shipped 2026-07-02:
+  `DELETE /api/profiles/:id` (owned; 404 cross-user), `db.deleteProfile`, Dashboard per-profile ✕ with
+  confirm; `active_profile_id` FK nulls out → falls back to latest. (Phase 23)
 
 ## Architecture
 
