@@ -102,3 +102,10 @@ One entry per completed milestone. Read this before working on the repo.
   review/edit (`db.updateProfile`). ProfileSetup "📄 Start from your résumé" card; manual entry stays
   the fallback. Verified by `scripts/verify-ph31.mjs` (text + real PDF, 14 assertions). **Phase 23
   done (R31/R32/R35/R36).** Next = **Phase 24** (interview kinds technical + HR, R33/R34/D22).
+- [2026-07-02 — Phase 24: interview domains + per-domain constellations](2026-07-02-phase24-interview-domains.md) —
+  **R33** `interviews.domain` (migration 0011, distinct from `kind`) + `server/src/domains.ts` registry
+  (technical→`interview.system`, HR→new `interview.hr.system` + `interview.hr` R35 feature); HR prompt =
+  fixed core + seeded-random general pool (`sampleHrTopics`) + deterministic company-values pool; R7/R23
+  + evaluation reused for HR (no new axes). **R34** `/api/progress` → per-domain constellations, hidden
+  until a domain has a finished interview (Progress-page tabs). Verified by `scripts/verify-ph24.mjs`;
+  `make check` + `make e2e` green. **All R1–R36 shipped except queued R26–R30.** Next = **owner's call.**

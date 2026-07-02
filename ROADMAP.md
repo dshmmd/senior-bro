@@ -122,12 +122,13 @@ card — for testers, partners, and early users. See D11.
   > Owner may reorder — if you want a flashy feature first (e.g. dynamic company packs),
   > say so and the agent will resequence.
 - 2026-07-02: **Phase 23 shipped in full** (R31 CV onboarding, R32 first-impression free tier,
-  R35 per-feature model routing, R36 delete profile). **NEXT WORK = Phase 24** (interview
-  kinds/domains: technical + HR, extensible — R33/R34/D22). The owner has already answered its
-  open questions (HR prompt = fixed core + random general pool + deterministic company-specific
-  pool; R7/R23 apply to HR like technical) — see the Phase 24 section. Watch the **`interviews.kind`
-  naming trap**: `kind` already means `full`/`coaching`; the new technical/HR axis is a *separate*
-  `domain` column (D22). If nothing else is queued by the owner, start Phase 24.
+  R35 per-feature model routing, R36 delete profile).
+- 2026-07-02: **Phase 24 shipped in full** (R33 interview domains technical + HR via a new
+  `domain` column + `server/src/domains.ts` registry + `interview.hr.system` prompt; R34 per-domain
+  constellations hidden until evidence; R7/R23 + evaluation reused for HR). Verified by
+  `scripts/verify-ph24.mjs`; `make check` + `make e2e` green. **All owner-directed requirements
+  R1–R36 are now shipped except the deferred/queued ones (R26–R30 admin UX / NL-store / k8s /
+  metrics / server-side STT).** No phase is queued — **next work is the owner's call.**
 
 ---
 
@@ -508,25 +509,29 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
   free-tier UX (how "N/3 first impressions" reads + the delete-position confirmation) and the CV
   onboarding flow before the next phase (Phase 24 — interview kinds).
 
-### Phase 24 — Interview kinds: technical + HR, extensible (R33, R34, D22)
-- [ ] R33: a domain field on interviews (`technical` seed, `hr` new) — **a new column**, not the
-      existing `interviews.kind` (already `full`/`coaching`, unrelated — don't overload it). User
-      picks a domain when starting; each domain gets its own versioned system prompt key (rides D12)
-      — adding a domain later is a registry entry, not a rewrite.
-- [ ] **HR prompt structure** (owner 2026-07-02) — three question pools composed per session, not
-      exhaustively asked from each (keeps the interview from ballooning in length):
-      1. **Fixed core** — present in every HR interview (opening rapport-building, closing/wrap-up).
-      2. **General pool** — universal HR topics (conflict resolution, teamwork, motivation, etc.) —
-         a **random subset** sampled each session.
-      3. **Company-specific pool** — culture/values questions sourced from the target's company pack
-         — **deterministic, not random** (drawn when the profile has a company pack; skipped otherwise).
-- [ ] R7 (weakness detection) and R23 (evidence-gated skill claims) **apply to HR exactly as they do
-      to technical** (owner 2026-07-02: "should be applied like in tech it did") — same mechanism,
-      HR-flavored content, no separate scoring axes.
-- [ ] R34: Per-domain gamification constellation (extends D7/Phase 6); a domain's constellation/
-      dashboard section is hidden until the user has evidence for it (no empty HR constellation for a
-      technical-only user, and vice versa).
-- **Gate:** owner reviews the actual HR general-question pool + company-specific tie-in before ship.
+### Phase 24 — Interview kinds: technical + HR, extensible (R33, R34, D22) ✅ (2026-07-02)
+- [x] R33: a `domain` field on interviews (`technical` seed, `hr` new) — **a new column** (migration
+      0011), not `interviews.kind`. `server/src/domains.ts` is the registry: each domain maps to its own
+      versioned system prompt key (technical reuses `interview.system`; HR = new `interview.hr.system`,
+      rides D12) + its own R35 routing feature (`interview.hr`). User picks the domain on the Dashboard
+      "Start a mock interview" cards; coaching drills stay domain-agnostic (`technical`). Adding a domain
+      later is a registry row + a seed prompt, no code branch rewrite.
+- [x] **HR prompt structure** (owner 2026-07-02) — three pools composed per session, not exhaustively:
+      1. **Fixed core** — opening rapport + closing, baked into the `interview.hr.system` seed body.
+      2. **General pool** — `HR_GENERAL_TOPICS` (12); a **random subset** (`HR_TOPIC_SAMPLE=5`) sampled
+         per session, seeded deterministically by the interview id so it's stable across turns + resume.
+      3. **Company-specific pool** — the target's company pack, injected **deterministically** when the
+         profile has one (skipped otherwise), framed as the company-values source.
+- [x] R7 (weakness detection) + R23 (evidence-gated skill claims) **apply to HR exactly as to technical**
+      — same weakness/claim mechanism + shared evaluation prompt (the evaluator is told the domain for
+      context; **no separate scoring axes**, per owner).
+- [x] R34: Per-domain gamification constellation (extends D7/Phase 6). `/api/progress` returns
+      `{ domains: [...] }` — one constellation per domain, and a domain is **omitted until it has a
+      finished interview** (no empty HR constellation for a technical-only user, and vice versa). The
+      Progress page shows per-domain tabs when more than one is unlocked.
+- **Phase 24 COMPLETE (2026-07-02):** verified by `scripts/verify-ph24.mjs` (domain persistence,
+      interview.hr routing proven via metering, per-domain unlock); `make check` + `make e2e` green.
+      **Gate:** owner reviews the HR general-question pool + company-values tie-in before further kinds.
 
 ---
 

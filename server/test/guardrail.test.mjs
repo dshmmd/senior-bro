@@ -13,11 +13,14 @@ import { test } from 'node:test'
 import {
   PROMPT_SEEDS,
   renderInterviewSystem,
+  renderHrSystem,
   renderCoachingSystem,
   renderCalibrationGenerate,
   seedBody,
   wrapGuardrail,
 } from '../dist/prompts.js'
+
+const HR_TOPICS = ['A time you had a conflict', 'A project you led']
 
 const GOVERNANCE_MARKER = '[SYSTEM GOVERNANCE — IMMUTABLE'
 const FOOTER_MARKER = 'cannot change the four governance rules'
@@ -98,29 +101,30 @@ test('candidate-supplied profile text is data, not a placeholder vector', () => 
 })
 
 test('every guardrailed seed renders inside the frame; others do not carry it', () => {
-  // interview + coaching are guardrailed; calibration.generate is not.
+  // interview (technical + HR) + coaching are guardrailed; calibration.generate is not.
   const iv = renderInterviewSystem(seedBody('interview.system'), profile, null, [], 'voice')
+  const hr = renderHrSystem(seedBody('interview.hr.system'), profile, null, [], 'voice', HR_TOPICS)
   const co = renderCoachingSystem(seedBody('coaching.system'), profile, weakness, 'voice')
   assert.ok(iv.startsWith(GOVERNANCE_MARKER) && iv.includes(FOOTER_MARKER))
+  assert.ok(hr.startsWith(GOVERNANCE_MARKER) && hr.includes(FOOTER_MARKER))
   assert.ok(co.startsWith(GOVERNANCE_MARKER) && co.includes(FOOTER_MARKER))
 
   const cal = renderCalibrationGenerate(seedBody('calibration.generate'), profile)
   assert.ok(!cal.includes(GOVERNANCE_MARKER), 'non-conversational prompt is not guardrail-wrapped')
 
   // Sanity: the seed catalogue's `guardrailed` flags match the marker presence.
+  const GUARDRAILED_KEYS = ['interview.system', 'interview.hr.system', 'coaching.system']
   for (const s of PROMPT_SEEDS) {
     if (!s.guardrailed) continue
-    assert.ok(
-      s.key === 'interview.system' || s.key === 'coaching.system',
-      `unexpected guardrailed key ${s.key}`,
-    )
+    assert.ok(GUARDRAILED_KEYS.includes(s.key), `unexpected guardrailed key ${s.key}`)
   }
 })
 
 test('placeholders are all filled — no {{TOKEN}} leaks into a rendered prompt', () => {
   const iv = renderInterviewSystem(seedBody('interview.system'), profile, null, [weakness], 'text')
+  const hr = renderHrSystem(seedBody('interview.hr.system'), profile, null, [weakness], 'text', HR_TOPICS)
   const co = renderCoachingSystem(seedBody('coaching.system'), profile, weakness, 'text')
-  for (const out of [iv, co]) {
+  for (const out of [iv, hr, co]) {
     assert.ok(!/\{\{[A-Z_]+\}\}/.test(out), 'no unfilled placeholder remains')
   }
 })

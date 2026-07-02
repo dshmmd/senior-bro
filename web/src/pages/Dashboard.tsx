@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { api, type InterviewSummary, type Profile, type ProfileListItem, type Weakness } from '../api'
+import {
+  api,
+  type InterviewDomain,
+  type InterviewSummary,
+  type Profile,
+  type ProfileListItem,
+  type Weakness,
+} from '../api'
 import { voiceSupported } from '../voice'
 import { ReportView } from './Report'
 
@@ -15,7 +22,12 @@ export function Dashboard({
 }: {
   profile: Profile
   email: string | null
-  onStartInterview: (mode: 'voice' | 'text', kind: 'full' | 'coaching', weaknessId?: number) => void
+  onStartInterview: (
+    mode: 'voice' | 'text',
+    kind: 'full' | 'coaching',
+    domain: InterviewDomain,
+    weaknessId?: number,
+  ) => void
   onResumeInterview: (id: number, mode: 'voice' | 'text', kind: 'full' | 'coaching') => void
   onNewProfile: () => void
   onProfileSwitched: () => void
@@ -26,6 +38,8 @@ export function Dashboard({
   const [weaknesses, setWeaknesses] = useState<Weakness[]>([])
   const [profiles, setProfiles] = useState<ProfileListItem[]>([])
   const [openReport, setOpenReport] = useState<number | null>(null)
+  // Which interview domain the Start cards launch (R33 / D22).
+  const [domain, setDomain] = useState<InterviewDomain>('technical')
   const canVoice = voiceSupported()
 
   const reloadHistory = () =>
@@ -194,11 +208,26 @@ export function Dashboard({
       )}
 
       <h2>Start a mock interview</h2>
+      {/* R33 / D22: pick the interview domain; the cards below launch it in that domain. */}
+      <div className="row" style={{ gap: 8, marginBottom: 4, alignItems: 'center' }}>
+        <span style={{ color: 'var(--muted)', fontSize: 13 }}>Kind:</span>
+        <button className={domain === 'technical' ? '' : 'secondary'} onClick={() => setDomain('technical')}>
+          🧠 Technical
+        </button>
+        <button className={domain === 'hr' ? '' : 'secondary'} onClick={() => setDomain('hr')}>
+          🤝 HR / Behavioral
+        </button>
+      </div>
+      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>
+        {domain === 'hr'
+          ? 'Culture fit, motivation, teamwork and conflict — STAR-style behavioral questions.'
+          : 'Coding depth, system design and technical trade-offs, calibrated to your level.'}
+      </p>
       <div className="row">
         <div
           className="card clickable"
           style={{ flex: 1 }}
-          onClick={() => canVoice && onStartInterview('voice', 'full')}
+          onClick={() => canVoice && onStartInterview('voice', 'full', domain)}
         >
           <b>🎙️ Voice interview</b>
           <p style={{ color: 'var(--muted)', fontSize: 14 }}>
@@ -207,7 +236,11 @@ export function Dashboard({
               : 'Not supported in this browser — try Chrome, Edge, or Safari.'}
           </p>
         </div>
-        <div className="card clickable" style={{ flex: 1 }} onClick={() => onStartInterview('text', 'full')}>
+        <div
+          className="card clickable"
+          style={{ flex: 1 }}
+          onClick={() => onStartInterview('text', 'full', domain)}
+        >
           <b>⌨️ Text interview</b>
           <p style={{ color: 'var(--muted)', fontSize: 14 }}>
             Classic chat format. Good for code-heavy answers.
@@ -227,9 +260,14 @@ export function Dashboard({
               <p style={{ color: 'var(--muted)', fontSize: 14 }}>{w.detail}</p>
               {w.fix && <p style={{ fontSize: 14 }}>💡 {w.fix}</p>}
               <div className="row">
-                <button onClick={() => onStartInterview('text', 'coaching', w.id)}>Drill this (text)</button>
+                <button onClick={() => onStartInterview('text', 'coaching', 'technical', w.id)}>
+                  Drill this (text)
+                </button>
                 {canVoice && (
-                  <button className="secondary" onClick={() => onStartInterview('voice', 'coaching', w.id)}>
+                  <button
+                    className="secondary"
+                    onClick={() => onStartInterview('voice', 'coaching', 'technical', w.id)}
+                  >
                     Drill with voice
                   </button>
                 )}
@@ -274,7 +312,7 @@ export function Dashboard({
                     }
                   >
                     <td>{h.id}</td>
-                    <td>{h.kind}</td>
+                    <td>{h.kind === 'coaching' ? 'coaching' : h.domain === 'hr' ? 'HR' : 'technical'}</td>
                     <td>{h.mode}</td>
                     <td>{h.created_at.slice(0, 16)}</td>
                     <td>

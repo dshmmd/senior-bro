@@ -1,0 +1,1 @@
+ALTER TABLE "interviews" ADD COLUMN "domain" text DEFAULT 'technical' NOT NULL;

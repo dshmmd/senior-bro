@@ -19,6 +19,7 @@ import {
 } from './providers.js'
 import { computeProgress } from './progress.js'
 import { FEATURES, isFeatureKey, type FeatureKey } from './features.js'
+import { DOMAINS, domainDef, sampleHrTopics } from './domains.js'
 import {
   FIRST_MESSAGE_TRIGGER,
   PROMPT_SEEDS,
@@ -28,6 +29,7 @@ import {
   renderCompanyPack,
   renderDistill,
   renderEvaluation,
+  renderHrSystem,
   renderInterviewSystem,
   renderResumeParse,
 } from './prompts.js'
@@ -171,6 +173,16 @@ async function requireCall(
   return { user, call }
 }
 
+/**
+ * Resolve + entitle a model call for an already-loaded interview, routing by its domain (R33).
+ * Used on the message/finish paths where the domain comes from the stored interview, not the body.
+ */
+async function callForInterview(user: db.User, interview: db.InterviewRow): Promise<ResolvedCall> {
+  const call = await resolveCall(user, domainDef(interview.domain).feature)
+  await enforceEntitlement(user, call, 'interview')
+  return call
+}
+
 /** Run a model call, record its token usage/cost, and return the text. */
 async function runModel(
   user: db.User,
@@ -289,6 +301,8 @@ const interviewSchema = z.object({
   profile_id: z.number().int().positive(),
   mode: z.enum(['voice', 'text']).default('text'),
   kind: z.enum(['full', 'coaching']).default('full'),
+  // Interview domain (R33 / D22). Coaching drills are domain-agnostic → 'technical'.
+  domain: z.enum(['technical', 'hr']).default('technical'),
   weakness_id: z.number().int().positive().optional(),
 })
 
@@ -1003,12 +1017,27 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
     return renderCoachingSystem(body, profile, target, interview.mode, userModel?.summary ?? null)
   }
   const pack = profile.skill_pack ? await db.resolvePublishedPack(profile.skill_pack) : null
-  const body = await db.activePromptBody('interview.system')
-  const [weaknesses, claims, userModel] = await Promise.all([
+  const dom = domainDef(interview.domain)
+  const [weaknesses, claims, userModel, body] = await Promise.all([
     db.listWeaknesses(profile.id),
     db.listClaims(profile.id),
     db.getUserModel(profile.id),
+    db.activePromptBody(dom.promptKey),
   ])
+  if (dom.key === 'hr') {
+    // General-topic pool sampled deterministically per interview (stable across turns + resume);
+    // the company pack becomes the deterministic company-values pool. R7/R23 apply as in technical.
+    return renderHrSystem(
+      body,
+      profile,
+      pack,
+      weaknesses,
+      interview.mode,
+      sampleHrTopics(interview.id),
+      claims,
+      userModel?.summary ?? null,
+    )
+  }
   return renderInterviewSystem(
     body,
     profile,
@@ -1049,12 +1078,19 @@ async function distillUserModel(
 }
 
 api.post('/interviews', async (c) => {
-  const { user, call } = await requireCall(c, 'interview', { feature: 'interview.technical' })
   const body = await parseBody(c, interviewSchema)
+  // Coaching drills are domain-agnostic (weakness-driven) → always the technical model route.
+  const dom = domainDef(body.kind === 'coaching' ? 'technical' : body.domain)
+  const { user, call } = await requireCall(c, 'interview', { feature: dom.feature })
   const profile = await ownProfile(user.id, body.profile_id)
 
-  const interview = await db.createInterview(profile.id, body.mode, body.kind)
-  await db.recordEvent(profile.id, 'interview_started', `${body.kind} · ${body.mode}`, interview.id)
+  const interview = await db.createInterview(profile.id, body.mode, body.kind, dom.key)
+  await db.recordEvent(
+    profile.id,
+    'interview_started',
+    `${dom.key} ${body.kind} · ${body.mode}`,
+    interview.id,
+  )
   const system = await systemFor(interview, body.weakness_id)
   const messages: ChatMessage[] = [{ role: 'user', content: FIRST_MESSAGE_TRIGGER }]
 
@@ -1087,10 +1123,11 @@ api.post('/interviews', async (c) => {
 })
 
 api.post('/interviews/:id/messages', async (c) => {
-  const { user, call } = await requireCall(c, 'interview', { feature: 'interview.technical' })
+  const user = await requireUser(c)
   const id = Number(c.req.param('id'))
   const interview = await ownInterview(user.id, id)
   if (interview.status !== 'active') throw new HttpError(409, 'interview already finished')
+  const call = await callForInterview(user, interview)
 
   const { content, preference } = await parseBody(c, messageSchema)
   // One-tap steering chip (Phase 4): log the preference so the user-model distiller learns it.
@@ -1131,12 +1168,13 @@ api.post('/interviews/:id/messages', async (c) => {
 })
 
 api.post('/interviews/:id/finish', async (c) => {
-  const { user, call } = await requireCall(c, 'interview', { feature: 'interview.technical' })
+  const user = await requireUser(c)
   const id = Number(c.req.param('id'))
   const interview = await ownInterview(user.id, id)
   if (interview.status === 'finished') return c.json(interview.report)
   if (interview.transcript.length < 2)
     throw new HttpError(400, 'not enough conversation to evaluate — answer at least one question')
+  const call = await callForInterview(user, interview)
 
   const profile = await ownProfile(user.id, interview.profile_id)
   const claims = await db.listClaims(profile.id)
@@ -1146,7 +1184,18 @@ api.post('/interviews/:id/finish', async (c) => {
     user,
     call,
     'You evaluate mock interviews and respond with strict JSON.',
-    [{ role: 'user', content: renderEvaluation(evalBody, profile, interview.transcript, claims) }],
+    [
+      {
+        role: 'user',
+        content: renderEvaluation(
+          evalBody,
+          profile,
+          interview.transcript,
+          claims,
+          domainDef(interview.domain).label,
+        ),
+      },
+    ],
     8192,
   )
   const report = extractJson<
@@ -1181,6 +1230,7 @@ api.get('/interviews', async (c) => {
       id: i.id,
       mode: i.mode,
       kind: i.kind,
+      domain: i.domain,
       status: i.status,
       created_at: i.created_at,
       turns: i.transcript.length,
@@ -1226,13 +1276,21 @@ api.post('/weaknesses/:id/status', async (c) => {
 
 // ── progress (gamification) ─────────────────────────────────────────
 
+// Per-domain constellations (R34 / D22): each interview domain gets its own progress map, and a
+// domain is only returned once it has a *finished* interview — so a technical-only user never sees
+// an empty HR constellation (and vice versa). Weaknesses stay profile-wide (shown in each domain).
 api.get('/progress', async (c) => {
   const user = await requireUser(c)
   const profile = await db.activeProfile(user.id)
-  if (!profile) return c.json(null)
-  const interviews = (await db.listInterviewsForUser(user.id)).filter((i) => i.profile_id === profile.id)
+  if (!profile) return c.json({ domains: [] })
+  const all = (await db.listInterviewsForUser(user.id)).filter((i) => i.profile_id === profile.id)
   const weaknesses = await db.listWeaknesses(profile.id)
-  return c.json(computeProgress(profile, interviews, weaknesses))
+  const domains = DOMAINS.flatMap((d) => {
+    const forDomain = all.filter((i) => i.domain === d.key)
+    if (forDomain.every((i) => i.report === null)) return [] // no evidence yet → stays hidden
+    return [{ domain: d.key, label: d.label, progress: computeProgress(profile, forDomain, weaknesses) }]
+  })
+  return c.json({ domains })
 })
 
 // ── personalization: "what we know about you" (D2 / D6 / Phase 4) ────

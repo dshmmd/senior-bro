@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type Progress as ProgressData } from '../api'
+import { api, type DomainProgress, type Progress as ProgressData } from '../api'
 import { createConstellation, type Constellation } from '../progress/constellation'
 import '../progress.css'
 
@@ -17,42 +17,17 @@ function HeatStrip({ days }: { days: { date: string; count: number }[] }) {
   )
 }
 
-export function Progress({ onBack }: { onBack: () => void }) {
-  const [data, setData] = useState<ProgressData | null>(null)
-  const [loading, setLoading] = useState(true)
+/** One domain's constellation + stats (R34). Re-mounts (via `key`) when the active domain changes. */
+function DomainConstellation({ data }: { data: ProgressData }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<Constellation | null>(null)
 
   useEffect(() => {
-    api
-      .progress()
-      .then(setData)
-      .catch(() => undefined)
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    if (!data || !canvasRef.current) return
+    if (!canvasRef.current) return
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     sceneRef.current = createConstellation(canvasRef.current, data, reduced)
     return () => sceneRef.current?.destroy()
   }, [data])
-
-  if (loading) return <div className="card msg thinking">Charting your constellation…</div>
-
-  if (!data || data.interviews_total === 0)
-    return (
-      <>
-        <h1>Your constellation</h1>
-        <div className="card">
-          Your skill map is still dark. Finish your first interview and watch the stars switch on — each
-          dimension you do well lights a cluster, and mastering one crystallizes it into a medal.
-          <div className="mt">
-            <button onClick={onBack}>Back to dashboard →</button>
-          </div>
-        </div>
-      </>
-    )
 
   const earnedMedals = data.medals.filter((m) => m.earned)
   const lockedMedals = data.medals.filter((m) => !m.earned)
@@ -62,13 +37,6 @@ export function Progress({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1 style={{ margin: '12px 0' }}>Your constellation</h1>
-        <button className="secondary" onClick={onBack}>
-          ← Back
-        </button>
-      </div>
-
       {allResolved && (
         <div className="finale">🏆 Every weakness conquered — your sky is complete. Legendary.</div>
       )}
@@ -155,6 +123,65 @@ export function Progress({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
+    </>
+  )
+}
+
+export function Progress({ onBack }: { onBack: () => void }) {
+  const [domains, setDomains] = useState<DomainProgress[]>([])
+  const [active, setActive] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api
+      .progress()
+      .then((r) => setDomains(r.domains))
+      .catch(() => undefined)
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="card msg thinking">Charting your constellation…</div>
+
+  // R34: no domain is unlocked until it has a finished interview, so an all-empty map means the
+  // user hasn't completed one yet.
+  if (domains.length === 0)
+    return (
+      <>
+        <h1>Your constellation</h1>
+        <div className="card">
+          Your skill map is still dark. Finish your first interview and watch the stars switch on — each
+          dimension you do well lights a cluster, and mastering one crystallizes it into a medal. Technical
+          and HR interviews each grow their own constellation.
+          <div className="mt">
+            <button onClick={onBack}>Back to dashboard →</button>
+          </div>
+        </div>
+      </>
+    )
+
+  const current = domains[Math.min(active, domains.length - 1)]!
+
+  return (
+    <>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h1 style={{ margin: '12px 0' }}>Your constellation</h1>
+        <button className="secondary" onClick={onBack}>
+          ← Back
+        </button>
+      </div>
+
+      {/* Per-domain tabs (R34): each unlocked interview domain has its own constellation. */}
+      {domains.length > 1 && (
+        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+          {domains.map((d, i) => (
+            <button key={d.domain} className={i === active ? '' : 'secondary'} onClick={() => setActive(i)}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <DomainConstellation key={current.domain} data={current.progress} />
     </>
   )
 }

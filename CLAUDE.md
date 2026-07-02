@@ -34,8 +34,14 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > and **R31** (CV-first onboarding — `POST /profile/from-cv`, PDF via `unpdf`, `resume.parse` prompt,
 > `PUT /profile/:id` edit) all shipped & verified (`scripts/verify-ph23.mjs`, `verify-ph31.mjs`,
 > `verify-ph35.mjs`; `make check` green).
-> **Phase 24 queued (next):** interview kinds/domains (technical + HR, extensible) with per-domain
-> prompts + gamification constellations (R33/R34/D22). See ROADMAP Phases 23–24.
+> **Phase 24 COMPLETE ✅ 2026-07-02:** interview **domains** (technical + HR, extensible) — new
+> `interviews.domain` column (migration 0011) + `server/src/domains.ts` registry + `interview.hr.system`
+> versioned prompt (HR = fixed core + sampled general pool + deterministic company-values pool); R7/R23 +
+> evaluation reused for HR; **R34** per-domain constellations (`/api/progress` → `{domains:[…]}`, hidden
+> until a domain has a finished interview; Progress-page tabs). Verified by `scripts/verify-ph24.mjs`;
+> `make check` + `make e2e` green. **All owner requirements R1–R36 shipped** except the queued/deferred
+> R26–R30 (admin UX, NL-store D18, k8s deploy, Prometheus/Grafana, server-side STT). **No phase is
+> queued — next work is the owner's call.** See ROADMAP Phases 23–24.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -200,14 +206,17 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   Shipped 2026-07-02: `profiles.first_impression_at` (migration 0009), `FREE_IMPRESSION_LIMIT=3`,
   `enforceEntitlement(profileId)` consumes/checks per-profile, `/api/usage` reports the budget,
   Plan page shows N/3. Verified by `scripts/verify-ph23.mjs`. (D21 · Phase 23)
-- [ ] R33: **Interview kinds (technical + HR, extensible)** — interviews carry a `kind`; each kind has
-  its own versioned system prompt (rides the D12 prompt-versioning infra), so adding a new kind later
-  is a registry entry, not a code rewrite. Technical = today's flow, unchanged. HR = new
-  behavioral/culture-fit-focused kind. (D22 · Phase 24)
-- [ ] R34: **Per-kind constellation + conditional display** — the gamification constellation
-  (D7/Phase 6) becomes per-interview-kind; a kind's constellation/dashboard section stays hidden until
-  the user has at least one interview of that kind (no empty HR constellation for a technical-only
-  user, and vice versa). (D22 · Phase 24)
+- [x] R33: **Interview kinds/domains (technical + HR, extensible)** — interviews carry a `domain`
+  (migration 0011; distinct from `kind` = full/coaching); `server/src/domains.ts` is the registry —
+  each domain → its own versioned system prompt (technical reuses `interview.system`; HR = new
+  `interview.hr.system`, D12) + its own R35 routing feature (`interview.hr`). HR prompt = fixed core
+  (open/close) + a random sampled subset of `HR_GENERAL_TOPICS` (seeded by interview id, stable across
+  turns/resume) + deterministic company-values pool from the company pack. R7/R23 + evaluation reused
+  for HR (no separate scoring axes). Shipped 2026-07-02, verified by `scripts/verify-ph24.mjs`. (D22 · Phase 24)
+- [x] R34: **Per-domain constellation + conditional display** — `/api/progress` returns per-domain
+  constellations; a domain is omitted until it has a *finished* interview (no empty HR constellation
+  for a technical-only user, and vice versa); the Progress page shows per-domain tabs. Shipped
+  2026-07-02. (D22 · Phase 24)
 - [x] R35: **Per-feature model selection (admin)** — replace the single global "default model" with a
   **model chosen per feature/purpose**, each falling back to the global default when unset. Shipped
   2026-07-02: `feature_models` table (migration 0010) + `server/src/features.ts` registry

@@ -70,6 +70,7 @@ export interface InterviewRow {
   profile_id: number
   mode: 'voice' | 'text'
   kind: 'full' | 'coaching'
+  domain: 'technical' | 'hr'
   status: 'active' | 'finished'
   transcript: TranscriptEntry[]
   report: InterviewReport | null
@@ -398,6 +399,7 @@ function toInterview(r: InterviewDbRow): InterviewRow {
     profile_id: r.profileId,
     mode: r.mode as 'voice' | 'text',
     kind: r.kind as 'full' | 'coaching',
+    domain: r.domain as 'technical' | 'hr',
     status: r.status as 'active' | 'finished',
     transcript: JSON.parse(r.transcript) as TranscriptEntry[],
     report: r.report ? (JSON.parse(r.report) as InterviewReport) : null,
@@ -406,8 +408,13 @@ function toInterview(r: InterviewDbRow): InterviewRow {
   }
 }
 
-export async function createInterview(profileId: number, mode: string, kind: string): Promise<InterviewRow> {
-  const [row] = await db.insert(t.interviews).values({ profileId, mode, kind }).returning()
+export async function createInterview(
+  profileId: number,
+  mode: string,
+  kind: string,
+  domain = 'technical',
+): Promise<InterviewRow> {
+  const [row] = await db.insert(t.interviews).values({ profileId, mode, kind, domain }).returning()
   return toInterview(row!)
 }
 

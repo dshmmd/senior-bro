@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type InterviewReport, type Profile } from '../api'
+import { api, type InterviewDomain, type InterviewReport, type Profile } from '../api'
 import { Listener, Speaker, stopSpeaking } from '../voice'
 import { ReportCard } from './Report'
 
@@ -46,6 +46,7 @@ export function Interview({
   profile,
   mode,
   kind,
+  domain,
   weaknessId,
   resumeId,
   onExit,
@@ -53,6 +54,7 @@ export function Interview({
   profile: Profile
   mode: 'voice' | 'text'
   kind: 'full' | 'coaching'
+  domain: InterviewDomain
   weaknessId?: number
   /** When set, reload this in-progress interview from the server instead of starting fresh (D14). */
   resumeId?: number
@@ -100,7 +102,7 @@ export function Interview({
       return
     }
     api
-      .startInterview(profile.id, mode, kind, weaknessId, onDelta)
+      .startInterview(profile.id, mode, kind, weaknessId, onDelta, domain)
       .then((r) => {
         setInterviewId(r.interview_id)
         setMessages([{ role: 'assistant', content: r.message }])
@@ -112,7 +114,7 @@ export function Interview({
         setThinking(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.id, mode, kind, weaknessId, resumeId])
+  }, [profile.id, mode, kind, domain, weaknessId, resumeId])
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
@@ -196,9 +198,13 @@ export function Interview({
         <h1 style={{ margin: '12px 0' }}>
           {kind === 'coaching'
             ? '🎯 Coaching drill'
-            : mode === 'voice'
-              ? '🎙️ Voice interview'
-              : '⌨️ Interview'}
+            : domain === 'hr'
+              ? mode === 'voice'
+                ? '🤝 HR interview (voice)'
+                : '🤝 HR interview'
+              : mode === 'voice'
+                ? '🎙️ Voice interview'
+                : '⌨️ Interview'}
         </h1>
         <div className="row">
           <button

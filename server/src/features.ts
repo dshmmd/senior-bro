@@ -35,6 +35,11 @@ export const FEATURES: readonly FeatureDef[] = [
     hint: 'Run + evaluate the technical mock interview.',
   },
   {
+    key: 'interview.hr',
+    label: 'HR / behavioral interview',
+    hint: 'Run + evaluate the HR/behavioral mock interview (Phase 24).',
+  },
+  {
     key: 'personalization.distill',
     label: 'User-model distillation',
     hint: 'Summarize what we know about the candidate after each interview.',

@@ -52,10 +52,13 @@ export interface InterviewReport {
   advice: string
 }
 
+export type InterviewDomain = 'technical' | 'hr'
+
 export interface InterviewSummary {
   id: number
   mode: 'voice' | 'text'
   kind: 'full' | 'coaching'
+  domain: InterviewDomain
   status: 'active' | 'finished'
   created_at: string
   turns: number
@@ -68,6 +71,7 @@ export interface InterviewDetail {
   profile_id: number
   mode: 'voice' | 'text'
   kind: 'full' | 'coaching'
+  domain: InterviewDomain
   status: 'active' | 'finished'
   transcript: { role: 'user' | 'assistant'; content: string }[]
   report: InterviewReport | null
@@ -100,6 +104,17 @@ export interface Progress {
   level_trail: { label: string; reached: boolean; current: boolean }[]
   medals: Medal[]
   overall_completion: number
+}
+
+/** One interview domain's constellation (R34). Only unlocked domains (≥1 finished interview) appear. */
+export interface DomainProgress {
+  domain: InterviewDomain
+  label: string
+  progress: Progress
+}
+
+export interface ProgressResponse {
+  domains: DomainProgress[]
 }
 
 export interface UserEvent {
@@ -361,10 +376,11 @@ export const api = {
     kind: 'full' | 'coaching',
     weakness_id: number | undefined,
     onDelta: (text: string) => void,
+    domain: InterviewDomain = 'technical',
   ) =>
     ssePost<{ interview_id: number; message: string }>(
       '/interviews',
-      { profile_id, mode, kind, weakness_id },
+      { profile_id, mode, kind, domain, weakness_id },
       onDelta,
     ),
   sendMessage: (id: number, content: string, onDelta: (text: string) => void, preference?: string) =>
@@ -379,7 +395,7 @@ export const api = {
   listInterviews: () => request<InterviewSummary[]>('/interviews'),
   listWeaknesses: () => request<Weakness[]>('/weaknesses'),
   setWeaknessStatus: (id: number, status: string) => post(`/weaknesses/${id}/status`, { status }),
-  progress: () => request<Progress | null>('/progress'),
+  progress: () => request<ProgressResponse>('/progress'),
   // personalization: "what we know about you" (D2 / D6)
   getMyModel: () => request<UserModelInfo | null>('/me/model'),
   saveMyModel: (summary: string) =>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { api, type Profile } from './api'
+import { api, type InterviewDomain, type Profile } from './api'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Admin } from './pages/Admin'
@@ -28,6 +28,7 @@ export type View =
       name: 'interview'
       mode: 'voice' | 'text'
       kind: 'full' | 'coaching'
+      domain: InterviewDomain
       weaknessId?: number
       resumeId?: number
     }
@@ -214,10 +215,12 @@ export function App() {
           <Dashboard
             profile={profile}
             email={account.email}
-            onStartInterview={(mode, kind, weaknessId) =>
-              setView({ name: 'interview', mode, kind, weaknessId })
+            onStartInterview={(mode, kind, domain, weaknessId) =>
+              setView({ name: 'interview', mode, kind, domain, weaknessId })
             }
-            onResumeInterview={(id, mode, kind) => setView({ name: 'interview', mode, kind, resumeId: id })}
+            onResumeInterview={(id, mode, kind) =>
+              setView({ name: 'interview', mode, kind, domain: 'technical', resumeId: id })
+            }
             onNewProfile={() => setView({ name: 'profile' })}
             onProfileSwitched={() => void refresh()}
             onRecalibrate={() => setView({ name: 'calibration' })}
@@ -231,6 +234,7 @@ export function App() {
             profile={profile}
             mode={view.mode}
             kind={view.kind}
+            domain={view.domain}
             weaknessId={view.weaknessId}
             resumeId={view.resumeId}
             onExit={() => void refresh()}

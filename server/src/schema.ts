@@ -114,7 +114,12 @@ export const interviews = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
     mode: text('mode').notNull().default('text'),
+    // 'full' | 'coaching' — the interview lifecycle (unchanged). NOT the domain (see `domain`).
     kind: text('kind').notNull().default('full'),
+    // Interview domain (R33 / D22): 'technical' (today's flow) | 'hr' (behavioral/culture-fit),
+    // extensible via server/src/domains.ts. Distinct from `kind`; each domain has its own versioned
+    // system prompt + its own gamification constellation (R34). Existing rows default to technical.
+    domain: text('domain').notNull().default('technical'),
     status: text('status').notNull().default('active'),
     transcript: text('transcript').notNull().default('[]'),
     report: text('report'),

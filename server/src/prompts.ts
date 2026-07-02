@@ -28,6 +28,7 @@ export type PromptKey =
   | 'calibration.generate'
   | 'calibration.grade'
   | 'interview.system'
+  | 'interview.hr.system'
   | 'coaching.system'
   | 'evaluation'
   | 'company.pack'
@@ -189,6 +190,26 @@ Rules:
 - {{REPLY_STYLE}}
 - When you have covered all phases and asked your wrap question, end your final message with the exact token [INTERVIEW_COMPLETE] on its own line.`
 
+const INTERVIEW_HR_SYSTEM_SEED = `You are "Senior Bro", a warm but perceptive HR / behavioral interviewer running a realistic mock interview.
+
+Candidate profile:
+{{PROFILE}}{{SKILL_PACK}}{{WEAKNESSES}}
+
+This is a BEHAVIORAL / culture-fit interview — NOT a technical one. Do not ask coding, algorithm, or system-design questions. Compose the session from these sources, in order, and keep it to roughly 8-10 questions total so it stays realistic (do NOT exhaustively ask everything below):
+1. OPENING (always): build rapport — a warm intro, then one question about what draws them to this role/company.
+2. GENERAL BEHAVIORAL — work through THESE sampled topics, one question each, expecting STAR-structured answers:
+{{HR_TOPICS}}
+3. COMPANY VALUES — if a company playbook appears above, ask 1-2 questions grounded in that company's stated values/culture/leadership principles; if no playbook is present, skip this step.
+4. CLOSING (always): ask whether they have questions for you, then close warmly.
+
+Rules:
+- Ask ONE question at a time. Never dump multiple questions.
+- Push past vague or generic answers — ask for the specific situation, their exact actions, and the measurable result (STAR) before moving on.
+- If an answer is thin, briefly coach (one tip on structuring it), then continue. This is practice — make them sharper.
+- Stay in character; be warm but professionally probing. No technical deep-dives.
+- {{REPLY_STYLE}}
+- When you have covered the opening, the sampled topics, any company-values questions, and asked your closing question, end your final message with the exact token [INTERVIEW_COMPLETE] on its own line.`
+
 const COACHING_SYSTEM_SEED = `You are "Senior Bro", a technical interview coach running a focused drill session.
 
 Candidate profile:
@@ -315,6 +336,15 @@ export const PROMPT_SEEDS: PromptSeed[] = [
     body: INTERVIEW_SYSTEM_SEED,
   },
   {
+    key: 'interview.hr.system',
+    label: 'HR interview — system prompt',
+    description:
+      'The HR/behavioral interviewer persona + 3-pool structure (fixed core + sampled general topics + company values). Wrapped in the fixed guardrail frame.',
+    placeholders: ['PROFILE', 'SKILL_PACK', 'WEAKNESSES', 'HR_TOPICS', 'REPLY_STYLE'],
+    guardrailed: true,
+    body: INTERVIEW_HR_SYSTEM_SEED,
+  },
+  {
     key: 'coaching.system',
     label: 'Coaching — system prompt',
     description: 'The weakness-drill coach persona. Wrapped in the fixed guardrail frame.',
@@ -400,6 +430,37 @@ export function renderInterviewSystem(
   return wrapGuardrail(filled)
 }
 
+/**
+ * HR/behavioral interview system prompt (R33). Mirrors `renderInterviewSystem` — same guardrail
+ * frame, profile/pack/weakness/claims/user-model blocks (R7 + R23 apply to HR exactly as to
+ * technical) — but fills the sampled general-topic pool (`HR_TOPICS`, deterministic per interview,
+ * see domains.sampleHrTopics). The company pack, when present, becomes the deterministic
+ * company-values pool via the shared skill block.
+ */
+export function renderHrSystem(
+  body: string,
+  profile: Profile,
+  pack: PackLike | null,
+  weaknesses: Weakness[],
+  mode: 'voice' | 'text',
+  hrTopics: string[],
+  claims: SkillClaim[] = [],
+  userModel: string | null = null,
+): string {
+  const topics = hrTopics.length ? hrTopics.map((t) => `   - ${t}`).join('\n') : '   - (none)'
+  const filled =
+    fill(body, {
+      PROFILE: profileBlock(profile),
+      SKILL_PACK: skillBlock(pack),
+      WEAKNESSES: weaknessBlock(weaknesses),
+      HR_TOPICS: topics,
+      REPLY_STYLE: replyStyle(mode),
+    }) +
+    claimsBlock(claims) +
+    userModelBlock(userModel)
+  return wrapGuardrail(filled)
+}
+
 export function renderCoachingSystem(
   body: string,
   profile: Profile,
@@ -456,11 +517,16 @@ export function renderEvaluation(
   profile: Profile,
   transcript: TranscriptEntry[],
   claims: SkillClaim[] = [],
+  domainLabel?: string,
 ): string {
   const convo = transcript
     .map((t) => `${t.role === 'assistant' ? 'INTERVIEWER' : 'CANDIDATE'}: ${t.content}`)
     .join('\n\n')
-  const target = `${profile.role}${profile.company ? ` at ${profile.company}` : ''}`
+  // Tell the evaluator what kind of interview this was so it reads the transcript in context
+  // (R7/R23 apply the same way for HR); the scoring axes are unchanged (owner: no separate axes).
+  const target = `${profile.role}${profile.company ? ` at ${profile.company}` : ''}${
+    domainLabel ? ` — ${domainLabel} interview` : ''
+  }`
   return fill(body, { TARGET: target, TRANSCRIPT: convo }) + evidenceInstruction(claims)
 }
 
