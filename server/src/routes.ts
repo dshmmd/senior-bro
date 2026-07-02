@@ -29,7 +29,9 @@ import {
   renderDistill,
   renderEvaluation,
   renderInterviewSystem,
+  renderResumeParse,
 } from './prompts.js'
+import { extractText } from 'unpdf'
 
 export const api = new Hono()
 
@@ -47,12 +49,13 @@ const CREDIT_PACKS = [100_000, 500_000, 1_000_000] as const
 
 /**
  * What a model call is for — gates which plans may make it (D11/D21). The onboarding kinds
- * ('calibration' | 'pack') draw from the free "first impression" budget; 'interview' never does.
+ * ('resume' | 'calibration' | 'pack') draw from the free "first impression" budget; 'interview'
+ * never does.
  */
-type CallKind = 'calibration' | 'interview' | 'pack'
+type CallKind = 'resume' | 'calibration' | 'interview' | 'pack'
 
 /** The onboarding call kinds that a free "first impression" credit covers (R32). */
-const FIRST_IMPRESSION_KINDS: readonly CallKind[] = ['calibration', 'pack']
+const FIRST_IMPRESSION_KINDS: readonly CallKind[] = ['resume', 'calibration', 'pack']
 
 /**
  * A resolved model call: which provider/key to use, plus the metering metadata
@@ -271,6 +274,9 @@ const profileSchema = z.object({
   years_experience: z.number().int().min(0).max(60).default(0),
   notes: z.string().max(4000).optional(),
 })
+
+// Résumé pasted as plain text (R31) — the multipart path carries a file instead.
+const resumeTextSchema = z.object({ text: z.string().max(60000) })
 
 const calibrationStartSchema = z.object({ profile_id: z.number().int().positive() })
 
@@ -807,6 +813,96 @@ api.post('/profile', async (c) => {
   })
   await db.recordEvent(profile.id, 'profile_created', profile.role)
   return c.json(profile)
+})
+
+/**
+ * Read résumé text from the request (R31). Accepts either a multipart upload (a `file` field —
+ * PDF is text-extracted server-side, anything else decoded as UTF-8 — plus an optional pasted
+ * `text` field) or a JSON `{ text }` body. Returns the raw text; the caller caps + validates it.
+ */
+async function readResumeText(c: Context): Promise<string> {
+  const ctype = c.req.header('content-type') ?? ''
+  if (ctype.includes('application/json')) {
+    const { text } = await parseBody(c, resumeTextSchema)
+    return text
+  }
+  const form = await c.req.parseBody()
+  const pasted = typeof form.text === 'string' ? form.text : ''
+  const file = form.file
+  if (file && typeof file !== 'string') {
+    const buf = new Uint8Array(await file.arrayBuffer())
+    const name = file.name.toLowerCase()
+    const isPdf =
+      name.endsWith('.pdf') ||
+      file.type === 'application/pdf' ||
+      (buf.length > 4 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) // %PDF
+    // unpdf extracts text server-side; `mergePages` returns a single string.
+    if (isPdf) return (await extractText(buf, { mergePages: true })).text
+    return new TextDecoder().decode(buf)
+  }
+  return pasted
+}
+
+/**
+ * CV-first onboarding (R31): extract a profile from an uploaded/pasted résumé with the
+ * `resume.parse` model (R35), then create it. Consumes a free "first impression" (R32) on the new
+ * profile — even if the user edits nothing further. The client then loads it for review/edit (PUT).
+ */
+api.post('/profile/from-cv', async (c) => {
+  const { user, call } = await requireCall(c, 'resume', { feature: 'resume.parse' })
+  const text = (await readResumeText(c)).slice(0, 24_000)
+  if (text.trim().length < 30)
+    throw new HttpError(400, "couldn't read enough text from that résumé — try pasting it as text")
+  const body = await db.activePromptBody('resume.parse')
+  const raw = await runModel(
+    user,
+    call,
+    'You extract structured profile data from a résumé and respond with strict JSON only.',
+    [{ role: 'user', content: renderResumeParse(body, text) }],
+    1200,
+  )
+  // The model's output is untrusted JSON — coerce every field defensively.
+  const x = extractJson<{
+    role?: unknown
+    company?: unknown
+    technologies?: unknown
+    years_experience?: unknown
+    notes?: unknown
+  }>(raw)
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+  const technologies = Array.isArray(x.technologies)
+    ? [...new Set(x.technologies.map((s) => str(s).trim()).filter(Boolean))].slice(0, 40)
+    : []
+  const years = Math.max(0, Math.min(60, Math.round(Number(x.years_experience) || 0)))
+  const profile = await db.createProfile(user.id, {
+    role: str(x.role).trim() || 'Software Engineer',
+    company: str(x.company).trim() || null,
+    skill_pack: null,
+    technologies,
+    years_experience: years,
+    notes: str(x.notes).trim().slice(0, 4000) || null,
+  })
+  await db.recordEvent(profile.id, 'profile_created', `${profile.role} (from résumé)`)
+  // A résumé check consumes a first impression on the created profile (idempotent; no-op for
+  // host/byok). Slot availability was already enforced above (kind 'resume', no profile yet).
+  if (call.freeIntro) await db.consumeFirstImpression(profile.id)
+  return c.json(profile)
+})
+
+// Edit a profile — the review/edit step after CV extraction (R31), and general profile editing.
+api.put('/profile/:id', async (c) => {
+  const user = await requireUser(c)
+  const profile = await ownProfile(user.id, Number(c.req.param('id')))
+  const b = await parseBody(c, profileSchema)
+  const updated = await db.updateProfile(profile.id, {
+    role: b.role,
+    company: b.company ?? null,
+    skill_pack: b.skill_pack ?? null,
+    technologies: b.technologies,
+    years_experience: b.years_experience,
+    notes: b.notes ?? null,
+  })
+  return c.json(updated)
 })
 
 api.get('/profile', async (c) => {

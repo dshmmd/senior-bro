@@ -361,6 +361,26 @@ function mockReply(system: string, messages: ChatMessage[]): string {
       body: `## ${company} — interview playbook\n\n${company} builds products at scale; this loop targets ${role}.\n\n**Process:** recruiter screen → technical screen → onsite (coding, system design, behavioral).\n\n**Signals:** problem-solving clarity, depth on stated technologies, ownership, and communication under follow-ups.\n\n**Question styles & examples:**\n- Coding: "Design a rate limiter."\n- System design: "How would you scale a notification service?"\n- Behavioral: "Tell me about a project you owned end to end."\n\n**Calibrate** difficulty to the candidate's assessed level; push one notch above on their strongest area.`,
     })
   }
+  // R31: extract a profile from a résumé. Reflect a few signals from the text so tests can
+  // assert the round-trip (real models read the whole résumé).
+  if (system.includes('extract structured profile data')) {
+    const resume = firstUser
+    const role =
+      /(senior|staff|junior|lead)?\s*(backend|frontend|full[ -]?stack|data|platform|ml)\s+engineer/i
+        .exec(resume)?.[0]
+        ?.replace(/\s+/g, ' ')
+        .trim()
+    const techs = ['Go', 'PostgreSQL', 'Kubernetes', 'React', 'Python', 'TypeScript'].filter((tech) =>
+      resume.includes(tech),
+    )
+    return JSON.stringify({
+      role: role ? role.replace(/\b\w/g, (m) => m.toUpperCase()) : 'Software Engineer',
+      company: /\btargeting\s+([A-Z][A-Za-z0-9.]+)/.exec(resume)?.[1] ?? null,
+      technologies: techs.length ? techs : ['JavaScript'],
+      years_experience: Number(/(\d+)\+?\s*years/i.exec(resume)?.[1] ?? 4),
+      notes: 'Extracted from the résumé (mock).',
+    })
+  }
   if (system.includes('calibration questions'))
     return JSON.stringify([
       'What does idempotency mean and why does it matter for APIs?',

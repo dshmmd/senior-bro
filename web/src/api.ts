@@ -321,6 +321,36 @@ export const api = {
     years_experience: number
     notes?: string
   }) => post<Profile>('/profile', p),
+  updateProfile: (
+    id: number,
+    p: {
+      role: string
+      company?: string
+      skill_pack?: string
+      technologies: string[]
+      years_experience: number
+      notes?: string
+    },
+  ) => request<Profile>(`/profile/${id}`, { method: 'PUT', body: JSON.stringify(p) }),
+  // CV-first onboarding (R31): upload a résumé file (PDF/text) or paste text → extracted profile.
+  profileFromCv: async (input: { file?: File; text?: string }): Promise<Profile> => {
+    if (input.file) {
+      const fd = new FormData()
+      fd.append('file', input.file)
+      if (input.text) fd.append('text', input.text)
+      const res = await fetch('/api/profile/from-cv', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: fd,
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(body.error ?? `Request failed: ${res.status}`)
+      }
+      return res.json() as Promise<Profile>
+    }
+    return post<Profile>('/profile/from-cv', { text: input.text ?? '' })
+  },
   startCalibration: (profile_id: number) =>
     post<{ calibration_id: number; questions: string[] }>('/calibration/start', { profile_id }),
   submitCalibration: (calibration_id: number, answers: string[]) =>

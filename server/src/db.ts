@@ -299,6 +299,36 @@ export async function setProfileLevel(id: number, level: string, summary: string
 }
 
 /**
+ * Edit a profile's fields (R31 review/edit + general editing). Caller must own `id`. Any newly
+ * added technologies are seeded as unverified skill claims (R23; idempotent so existing ones stay).
+ */
+export async function updateProfile(
+  id: number,
+  p: {
+    role: string
+    company: string | null
+    skill_pack: string | null
+    technologies: string[]
+    years_experience: number
+    notes: string | null
+  },
+): Promise<Profile | null> {
+  await db
+    .update(t.profiles)
+    .set({
+      role: p.role,
+      company: p.company,
+      skillPack: p.skill_pack,
+      technologies: JSON.stringify(p.technologies),
+      yearsExperience: p.years_experience,
+      notes: p.notes,
+    })
+    .where(eq(t.profiles.id, id))
+  await seedClaims(id, p.technologies)
+  return getProfile(id)
+}
+
+/**
  * Delete a profile and everything under it (R36). Child rows (interviews, weaknesses, skill
  * claims, events, calibrations, user model) cascade at the DB via their `profile_id` FKs; the
  * `users.active_profile_id` FK is `set null` on delete, so `activeProfile()` falls back to the

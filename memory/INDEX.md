@@ -96,3 +96,9 @@ One entry per completed milestone. Read this before working on the repo.
   never routed**, unassigned → global default. Admin "Feature model routing" UI + `GET/PUT
   /api/admin/feature-models`. Verified by `scripts/verify-ph35.mjs` (routing proven via metering cost).
   **Remaining Phase 23:** R31 (CV onboarding — routes CV parse through the new `resume.parse` feature).
+- [2026-07-02 — R31: CV-first onboarding (Phase 23 COMPLETE)](2026-07-02-r31-cv-first-onboarding.md) —
+  `POST /api/profile/from-cv` (multipart file — PDF via **`unpdf`** — or JSON paste) → `resume.parse`
+  model (R35-routed) → created profile, consuming a first impression (R32). `PUT /api/profile/:id`
+  review/edit (`db.updateProfile`). ProfileSetup "📄 Start from your résumé" card; manual entry stays
+  the fallback. Verified by `scripts/verify-ph31.mjs` (text + real PDF, 14 assertions). **Phase 23
+  done (R31/R32/R35/R36).** Next = **Phase 24** (interview kinds technical + HR, R33/R34/D22).

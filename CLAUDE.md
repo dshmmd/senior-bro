@@ -27,14 +27,15 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > (R25/D19): `arvan` OpenAI-compatible provider with per-model gateway base URL + `apikey` auth; usage
 > metered from prompt/completion tokens with a zero-usage fallback. Owner additions **R26–R29** (admin
 > dashboard upgrade, NL-store lazy migration D18, k8s deploy, Prometheus/Grafana) are queued.
-> **Owner additions 2026-07-02 (R31–R36, D21/D22/D23, Phases 23–24).** **Phase 23 partial ✅:**
-> **R32** (shared 3-per-user "first impression" free tier, redefining R18's unlimited free calibration),
-> **R36** (delete a profile/position + its history, which frees a slot), and **R35** (per-feature admin
-> model routing, D23 — `feature_models` migration 0010 + `server/src/features.ts`) shipped & verified
-> 2026-07-02 (`scripts/verify-ph23.mjs`, `scripts/verify-ph35.mjs`).
-> **Remaining Phase 23:** R31 (CV-first onboarding).
-> **Phase 24 queued:** interview kinds/domains (technical + HR, extensible) with per-domain prompts +
-> gamification constellations (R33/R34/D22). See ROADMAP Phases 23–24.
+> **Owner additions 2026-07-02 (R31–R36, D21/D22/D23, Phases 23–24).** **Phase 23 COMPLETE ✅
+> 2026-07-02:** **R32** (shared 3-per-user "first impression" free tier, redefining R18's unlimited
+> free calibration), **R36** (delete a profile/position + its history, which frees a slot), **R35**
+> (per-feature admin model routing, D23 — `feature_models` migration 0010 + `server/src/features.ts`),
+> and **R31** (CV-first onboarding — `POST /profile/from-cv`, PDF via `unpdf`, `resume.parse` prompt,
+> `PUT /profile/:id` edit) all shipped & verified (`scripts/verify-ph23.mjs`, `verify-ph31.mjs`,
+> `verify-ph35.mjs`; `make check` green).
+> **Phase 24 queued (next):** interview kinds/domains (technical + HR, extensible) with per-domain
+> prompts + gamification constellations (R33/R34/D22). See ROADMAP Phases 23–24.
 
 ## ▶ START HERE — when the owner says "continue"
 
@@ -184,10 +185,12 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   option. **Owner deciding the provider — build deferred until they confirm.** (D20, refines D17)
 
 ### Owner additions 2026-07-02 (R31–R36) — CV onboarding, first-impression free tier, interview kinds
-- [ ] R31: **CV-first onboarding** — upload a resume (PDF/text); LLM extracts job target, company/tier,
-  technologies, and seniority signals straight into the profile, replacing manual Q&A as the default
-  onboarding path (manual entry stays as a fallback/edit). Extends the unstarted Phase 5 resume-intake
-  item. (Phase 5 / Phase 23)
+- [x] R31: **CV-first onboarding** — upload a resume (PDF/text); LLM extracts job target, company,
+  technologies, and seniority straight into the profile; manual entry stays as fallback/edit. Shipped
+  2026-07-02: `POST /api/profile/from-cv` (PDF via `unpdf`, or pasted text) → `resume.parse` model
+  (R35-routed) → created profile (consumes a first impression, R32); `PUT /api/profile/:id` review/edit;
+  `resume.parse` versioned prompt; ProfileSetup "📄 Start from your résumé" card. Verified by
+  `scripts/verify-ph31.mjs`. (Phase 23)
 - [x] R32: **Shared "first impression" free-tier credit** — resume-check, company/target-knowledge
   lookup-or-generation, first-knowledge-build (user-model bootstrap), and calibration all draw from
   **one shared lifetime counter of 3 per email-verified user** — touching any one of them, even
@@ -224,7 +227,7 @@ senior-bro (npm workspace monorepo)
 ├── server/   Hono + PostgreSQL (Drizzle ORM, Docker). Serves API + built web app. Port 4747.
 │   ├── src/index.ts      entry: static serving + API mounting
 │   ├── src/mode.ts       SENIORBRO_MODE=local|hosted (local = single implicit owner)
-│   ├── src/schema.ts     Drizzle table definitions (17 tables, FKs+indexes); migrations in server/drizzle/
+│   ├── src/schema.ts     Drizzle table definitions (16 tables, FKs+indexes); migrations in server/drizzle/
 │   ├── src/db.ts         async Drizzle queries (DATABASE_URL); migrate+seed on boot; users/
 │   │                     sessions/magic_links + per-user config + isolation + models + usage_events
 │   │                     + plans/credit (users.plan, token_quota) + invite_codes (D11)
@@ -233,6 +236,8 @@ senior-bro (npm workspace monorepo)
 │   │                     + skill_claims (evidence-gated skills: seedClaims/applySkillEvidence, R23)
 │   │                     + user_events/user_models (personalization: recordEvent/listEvents/
 │   │                       getUserModel/setUserModel/clearUserModel, D2 · Phase 4)
+│   │                     + profiles.first_impression_at (free-tier R32) + updateProfile/deleteProfile
+│   │                       (R31/R36) + feature_models routing (assignedFeatureModel/setFeatureModel, R35)
 │   ├── src/config.ts     AppConfig type + legacy config.json reader (migrated into db)
 │   ├── src/crypto.ts     AES-256-GCM secret encryption (api keys at rest), random tokens
 │   ├── src/auth.ts       hosted magic-link sessions, requireUser/currentUser, sb_session cookie
@@ -242,11 +247,12 @@ senior-bro (npm workspace monorepo)
 │   ├── src/providers.ts  LLM abstraction: anthropic | openai | arvan | claude-cli | codex-cli | mock
 │   │                     (chat() returns text + usage; shared chatOpenAICompatible for openai+arvan, D19;
 │   │                     ChatOptions.webSearch → Anthropic web_search, D16; zero-usage→char-estimate fallback)
-│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. company.pack, personalization.distill)
+│   ├── src/prompts.ts    seed prompt bodies (PROMPT_SEEDS, incl. resume.parse, company.pack, personalization.distill)
 │   │                     + guardrail frame + code-level claims/evidence + user-model blocks (R23/D2) + render*()
 │   ├── src/features.ts   per-feature model-routing registry (R35/D23): FEATURES[] + FeatureKey
 │   ├── src/skills.ts     loadSeedPacks(): reads skills/*.md — SEED ONLY (runtime packs live in company_packs, D10)
 │   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode); /packs/ensure generate-on-miss (D10);
+│                         /profile/from-cv (résumé→profile, PDF via unpdf, R31) + PUT /profile/:id + DELETE /profiles/:id;
 │                         /me/model read/correct/delete + post-interview distillUserModel() (D2 · Phase 4)
 ├── web/      React + Vite SPA
 │   ├── src/voice.ts      Web Speech API wrapper (STT + TTS)

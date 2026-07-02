@@ -121,6 +121,13 @@ card — for testers, partners, and early users. See D11.
   > 14 hardens correctness/safety; 15/16 are high-value features that ride on the above.
   > Owner may reorder — if you want a flashy feature first (e.g. dynamic company packs),
   > say so and the agent will resequence.
+- 2026-07-02: **Phase 23 shipped in full** (R31 CV onboarding, R32 first-impression free tier,
+  R35 per-feature model routing, R36 delete profile). **NEXT WORK = Phase 24** (interview
+  kinds/domains: technical + HR, extensible — R33/R34/D22). The owner has already answered its
+  open questions (HR prompt = fixed core + random general pool + deterministic company-specific
+  pool; R7/R23 apply to HR like technical) — see the Phase 24 section. Watch the **`interviews.kind`
+  naming trap**: `kind` already means `full`/`coaching`; the new technical/HR axis is a *separate*
+  `domain` column (D22). If nothing else is queued by the owner, start Phase 24.
 
 ---
 
@@ -190,9 +197,10 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
   or finish Phase 4 with capability tiers).
 
 ### Phase 5 — Resume & opportunity pipeline
-> **R31 (owner 2026-07-02, Phase 23) specifies the first bullet below**: CV upload + LLM extraction
-> becomes the *default* onboarding path (manual Q&A is the fallback/edit path), not just an added option.
-- [ ] Resume intake (PDF/text upload → parsed into profile) or guided resume *builder* interview
+> **R31 (Phase 23) ✅ 2026-07-02 delivered the résumé-intake bullet below**: CV upload + LLM extraction
+> is now the *default* onboarding path (manual Q&A is the fallback/edit). The remaining Phase 5 items
+> (resume *improvement* loop, job discovery, target-posting mode) are still open.
+- [x] Resume intake (PDF/text upload → parsed into profile) — shipped as R31 (Phase 23). PDF via `unpdf`.
 - [ ] Resume improvement loop driven by interview evidence ("you said X in interviews — your resume undersells it")
 - [ ] Job discovery: web search for live openings in the user's country/role; match-scored against profile
 - [ ] Target-company mode: pick a real opening → interview prep tuned to that posting
@@ -462,11 +470,16 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 > onboarding and the free-tier gate everything else sits behind — then 24, which is net-new and
 > independent but reads better once onboarding is CV-first.
 
-### Phase 23 — CV-first onboarding + shared free-tier credit (R31, R32, R35, R36, D21, D23)
-- [ ] R31: CV upload (PDF/text) → LLM extraction into profile fields (job target, company/tier,
-      technologies, seniority signals); manual Q&A becomes the fallback/edit path, not the default.
-      No format/provider constraint from the owner — accept PDF at minimum; which model parses it is
-      an R35 per-feature routing choice, not hardcoded.
+### Phase 23 — CV-first onboarding + shared free-tier credit (R31, R32, R35, R36, D21, D23) ✅ (2026-07-02)
+- [x] **R31: CV-first onboarding** ✅ (2026-07-02). `POST /api/profile/from-cv` accepts a multipart
+      file (PDF text-extracted server-side via **`unpdf`**, else decoded as text) or a JSON `{text}`
+      paste; the `resume.parse` model (routed via R35) extracts role/company/technologies/seniority
+      into a **created** profile (consuming one first impression, R32, even if abandoned). New
+      `resume.parse` versioned prompt (D12) treats résumé text as untrusted data. `PUT /api/profile/:id`
+      (new) is the review/edit step; `db.updateProfile` re-seeds skill claims. ProfileSetup shows a
+      "📄 Start from your résumé" card that extracts → prefills → user reviews/edits → continues;
+      manual entry stays the fallback. Verified by `scripts/verify-ph31.mjs` (text + real PDF bytes,
+      extract → edit → calibrate, first-impression accounting, 400 on too-little text).
 - [x] **R32: Shared 3-per-user "first impression" free tier** ✅ (2026-07-02). Redefines Phase 13's
       unconditional 30k-token free level-check (D21): a `free-intro` user now gets `FREE_IMPRESSION_LIMIT`
       (3) free first impressions, one per **profile/position** they onboard. Implementation ties the
@@ -490,9 +503,10 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
       their cost). Unassigned/disabled → falls back to `is_default`, so zero admin action preserves
       behavior. Admin UI: "Feature model routing" dropdowns; `GET/PUT /api/admin/feature-models`.
       Locked by `scripts/verify-ph35.mjs` (routing proven via metering: routed calibration incurs cost).
-- **Sub-gate (2026-07-02):** R32 + R36 + R35 shipped & verified. Remaining Phase 23 work: **R31 (CV)**.
-- **Gate:** owner reviews the free-tier UX (how "2 of 3 first impressions left" is communicated, and
-  the delete-position confirmation copy) before it ships.
+- **Phase 23 COMPLETE (2026-07-02):** R31 + R32 + R35 + R36 all shipped & verified
+  (`verify-ph23`, `verify-ph31`, `verify-ph35`; `make check` green). **Gate:** owner reviews the
+  free-tier UX (how "N/3 first impressions" reads + the delete-position confirmation) and the CV
+  onboarding flow before the next phase (Phase 24 — interview kinds).
 
 ### Phase 24 — Interview kinds: technical + HR, extensible (R33, R34, D22)
 - [ ] R33: a domain field on interviews (`technical` seed, `hr` new) — **a new column**, not the

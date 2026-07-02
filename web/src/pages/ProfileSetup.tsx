@@ -11,6 +11,11 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
   const [packs, setPacks] = useState<SkillPackSummary[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // CV-first onboarding (R31): the extracted-then-created profile we're now reviewing/editing.
+  const [draftId, setDraftId] = useState<number | null>(null)
+  const [cvFile, setCvFile] = useState<File | null>(null)
+  const [cvText, setCvText] = useState('')
+  const [extracting, setExtracting] = useState(false)
 
   useEffect(() => {
     api
@@ -21,6 +26,33 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
 
   const [researching, setResearching] = useState(false)
   const tiers = packs.filter((p) => p.source === 'tier')
+
+  // R31: extract a profile from the uploaded/pasted résumé, then prefill the form for review/edit.
+  const extractFromCv = async () => {
+    if (!cvFile && cvText.trim().length < 30) {
+      setError('Upload a résumé file or paste at least a few lines of it first.')
+      return
+    }
+    setExtracting(true)
+    setError('')
+    try {
+      const p = await api.profileFromCv({
+        file: cvFile ?? undefined,
+        text: cvText.trim() || undefined,
+      })
+      setDraftId(p.id)
+      setRole(p.role)
+      setCompany(p.company ?? '')
+      setSkillPack('')
+      setTechnologies(p.technologies.join(', '))
+      setYears(p.years_experience)
+      setNotes(p.notes ?? '')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExtracting(false)
+    }
+  }
 
   const save = async () => {
     setBusy(true)
@@ -39,7 +71,7 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
           setResearching(false)
         }
       }
-      await api.createProfile({
+      const payload = {
         role,
         company: company || undefined,
         skill_pack: pack || undefined,
@@ -49,7 +81,10 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
           .filter(Boolean),
         years_experience: years,
         notes: notes || undefined,
-      })
+      }
+      // A CV-extracted profile already exists (R31) — update it; otherwise create fresh (manual path).
+      if (draftId) await api.updateProfile(draftId, payload)
+      else await api.createProfile(payload)
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -62,6 +97,42 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
     <>
       <h1>Who are we interviewing for?</h1>
       <p className="sub">This shapes every question you'll get — be specific.</p>
+
+      {draftId === null && (
+        <div className="card" style={{ borderColor: 'var(--accent)' }}>
+          <b>📄 Start from your résumé</b>
+          <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
+            Upload a PDF (or paste the text) and we&apos;ll fill in the details below — then you review and
+            tweak. Prefer to type it yourself? Just skip this and fill the form.
+          </div>
+          <input
+            type="file"
+            accept=".pdf,.txt,.md,application/pdf,text/plain"
+            onChange={(e) => setCvFile(e.target.files?.[0] ?? null)}
+          />
+          <textarea
+            value={cvText}
+            placeholder="…or paste your résumé text here"
+            style={{ marginTop: 8 }}
+            onChange={(e) => setCvText(e.target.value)}
+          />
+          <div className="mt">
+            <button
+              disabled={extracting || (!cvFile && cvText.trim().length < 30)}
+              onClick={() => void extractFromCv()}
+            >
+              {extracting ? 'Reading your résumé…' : 'Extract from résumé →'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {draftId !== null && (
+        <div className="card" style={{ borderColor: 'var(--accent)' }}>
+          ✓ We read your résumé and filled in the details below — <b>review and edit</b>, then continue.
+        </div>
+      )}
+
       <div className="card">
         <label>Job position you're applying for *</label>
         <input
