@@ -531,6 +531,7 @@ export function renderInterviewSystem(
   mode: 'voice' | 'text',
   claims: SkillClaim[] = [],
   userModel: string | null = null,
+  extraGuidance = '',
 ): string {
   const filled =
     fill(body, {
@@ -541,7 +542,8 @@ export function renderInterviewSystem(
     }) +
     claimsBlock(claims) +
     userModelBlock(userModel) +
-    teachingBlock()
+    teachingBlock() +
+    extraGuidance
   return wrapGuardrail(filled)
 }
 
@@ -561,6 +563,7 @@ export function renderHrSystem(
   hrTopics: string[],
   claims: SkillClaim[] = [],
   userModel: string | null = null,
+  extraGuidance = '',
 ): string {
   const topics = hrTopics.length ? hrTopics.map((t) => `   - ${t}`).join('\n') : '   - (none)'
   const filled =
@@ -573,7 +576,8 @@ export function renderHrSystem(
     }) +
     claimsBlock(claims) +
     userModelBlock(userModel) +
-    teachingBlock()
+    teachingBlock() +
+    extraGuidance
   return wrapGuardrail(filled)
 }
 
@@ -583,6 +587,7 @@ export function renderCoachingSystem(
   weakness: Weakness,
   mode: 'voice' | 'text',
   userModel: string | null = null,
+  extraGuidance = '',
 ): string {
   const filled =
     fill(body, {
@@ -591,7 +596,9 @@ export function renderCoachingSystem(
       WEAKNESS_DETAIL: weakness.detail,
       WEAKNESS_FIX: weakness.fix || 'none recorded',
       REPLY_STYLE: replyStyle(mode),
-    }) + userModelBlock(userModel)
+    }) +
+    userModelBlock(userModel) +
+    extraGuidance
   return wrapGuardrail(filled)
 }
 

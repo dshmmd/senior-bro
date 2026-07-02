@@ -20,6 +20,7 @@ export interface User {
   model_id: number | null
   token_quota: number | null
   active_profile_id: number | null
+  capability_tier: string | null
   created_at: string
 }
 
@@ -48,6 +49,7 @@ export interface ModelOption {
   price_in: number // USD per 1M input tokens
   price_out: number // USD per 1M output tokens
   has_key: boolean
+  capability_tier: string | null // D3: probed once when the model is added
 }
 
 export interface Profile {
@@ -663,8 +665,14 @@ function toUser(r: UserRow): User {
     model_id: r.modelId,
     token_quota: r.tokenQuota,
     active_profile_id: r.activeProfileId,
+    capability_tier: r.capabilityTier,
     created_at: r.createdAt,
   }
+}
+
+/** Store a BYOK user's probed capability tier (D3). */
+export async function setUserCapabilityTier(userId: number, tier: string): Promise<void> {
+  await db.update(t.users).set({ capabilityTier: tier }).where(eq(t.users.id, userId))
 }
 
 export async function getUser(id: number): Promise<User | null> {
@@ -795,7 +803,13 @@ function toModel(r: ModelRow): ModelOption {
     price_in: r.priceIn,
     price_out: r.priceOut,
     has_key: Boolean(r.apiKeyEnc),
+    capability_tier: r.capabilityTier,
   }
+}
+
+/** Store a curated model's probed capability tier (D3). */
+export async function setModelCapabilityTier(id: number, tier: string): Promise<void> {
+  await db.update(t.models).set({ capabilityTier: tier }).where(eq(t.models.id, id))
 }
 
 export async function listModels(enabledOnly = false): Promise<ModelOption[]> {

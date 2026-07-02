@@ -48,7 +48,12 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > by `scripts/verify-ph5.mjs`. **Phase 7 COMPLETE ✅:** teaching mode (socratic micro-lesson then
 > re-ask, code-injected into interview/HR prompts), 🎓 one-tap "teach me" chip, and a post-interview
 > **study plan** (`POST /api/study-plan`) linked into coaching drills. Verified by `scripts/verify-ph7.mjs`.
-> **NEXT: Phase 4 leftover — D3 capability tiers** (BYOK output parity). See ROADMAP Phases 5/7 + Phase 4.
+> **Phase 4 COMPLETE ✅:** D3 **capability tiers** (`server/src/capability.ts` — fast/standard/deep,
+> `classifyByName` + one-shot `probeTier`; probed once → `users`/`models.capability_tier` migration 0012;
+> `ResolvedCall.tier` sizes token budgets + injects a per-tier "MODEL NOTE" into interview/HR/coaching;
+> surfaced in /config, /usage, admin). Verified by `scripts/verify-ph4-d3.mjs` + `capability.test.mjs`.
+> **The owner-authorized 5 → 7 → 4 track is fully shipped.** Next work is the owner's call — remaining
+> queued items are the infra track R26–R30 (admin UX, NL-store D18, k8s deploy, Prometheus/Grafana, STT).
 
 ## ▶ START HERE — when the owner says "continue"
 

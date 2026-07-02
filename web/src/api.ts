@@ -253,6 +253,7 @@ export interface ModelOption {
   price_in: number
   price_out: number
   has_key: boolean
+  capability_tier: string | null
 }
 
 export interface UsageInfo {
@@ -270,6 +271,8 @@ export interface UsageInfo {
   // Free-tier "first impression" budget (R32): how many of the shared 3 the user has spent.
   first_impressions_used: number
   first_impressions_limit: number
+  // Capability tier of the model that would power this user's calls (D3), or null if none.
+  capability_tier: string | null
 }
 
 export interface InviteCode {
@@ -345,9 +348,10 @@ export const api = {
   verifyMagicLink: (token: string) =>
     post<{ ok: boolean; email: string | null; role: 'user' | 'admin' }>('/auth/verify', { token }),
   logout: () => post<{ ok: boolean }>('/auth/logout', {}),
-  getConfig: () => request<{ provider?: string; model?: string; hasKey: boolean }>('/config'),
+  getConfig: () =>
+    request<{ provider?: string; model?: string; hasKey: boolean; capability_tier?: string }>('/config'),
   saveConfig: (provider: string, apiKey: string, model?: string) =>
-    post<{ ok: boolean }>('/config', { provider, apiKey, model }),
+    post<{ ok: boolean; capability_tier?: string }>('/config', { provider, apiKey, model }),
   skills: () => request<SkillPackSummary[]>('/skills'),
   ensurePack: (company: string, role: string) =>
     post<{ pack_id: number; company: string; generated: boolean; searched?: boolean }>('/packs/ensure', {

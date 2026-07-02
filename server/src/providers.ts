@@ -423,6 +423,8 @@ function mockReply(system: string, messages: ChatMessage[]): string {
         },
       ],
     })
+  // D3: capability probe — a well-behaved model returns the exact strict JSON asked for.
+  if (system.includes('capability probe')) return JSON.stringify({ ok: true, n: 3 })
   // Phase 7: post-interview study plan; link the first weakness id if the prompt carries one.
   if (system.includes('study plan')) {
     const wid = /\[id (\d+)\]/.exec(firstUser)?.[1]

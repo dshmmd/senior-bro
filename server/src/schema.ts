@@ -38,6 +38,10 @@ export const users = pgTable('users', {
   // models (token_quota is the credit allowance); 'byok'/'local' = free. Local owner = 'local'.
   plan: text('plan').notNull().default('free-intro'),
   tokenQuota: integer('token_quota'),
+  // BYOK capability tier (D3): 'fast' | 'standard' | 'deep', probed once when the user sets their
+  // own key, so a cheap key and a premium key get consistent UX (sized budgets + prompt guidance).
+  // Null = not probed yet (falls back to a name-based classification at call time).
+  capabilityTier: text('capability_tier'),
   // The profile the user is currently working in (R24). Null → fall back to their latest.
   // The `: AnyPgColumn` return annotation breaks the users↔profiles circular-FK type cycle
   // (without it, Drizzle's inference collapses both tables to `any`).
@@ -219,6 +223,8 @@ export const models = pgTable('models', {
   isDefault: boolean('is_default').notNull().default(false),
   priceIn: real('price_in').notNull().default(0),
   priceOut: real('price_out').notNull().default(0),
+  // Capability tier (D3), probed once when the model is added. Same meaning as users.capability_tier.
+  capabilityTier: text('capability_tier'),
   createdAt: createdAt(),
 })
 

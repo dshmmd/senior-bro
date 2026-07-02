@@ -20,6 +20,7 @@ import {
 import { computeProgress } from './progress.js'
 import { FEATURES, isFeatureKey, type FeatureKey } from './features.js'
 import { DOMAINS, domainDef, sampleHrTopics } from './domains.js'
+import { classifyByName, isTier, probeTier, TIERS, type Tier } from './capability.js'
 import {
   FIRST_MESSAGE_TRIGGER,
   PROMPT_SEEDS,
@@ -74,7 +75,14 @@ interface ResolvedCall {
   priceIn: number
   priceOut: number
   freeIntro: boolean
+  // Capability tier (D3): sizes token budgets + adds per-tier prompt guidance so a cheap key and a
+  // premium key get consistent UX. Stored (probed) tier if present, else a name classification.
+  tier: Tier
 }
+
+/** Resolve a tier from a stored value (falling back to a name-based classification). */
+const resolveTier = (stored: string | null | undefined, model: string): Tier =>
+  isTier(stored) ? stored : classifyByName(model)
 
 /** Build a ResolvedCall from a curated model's config (host-funded, metered). */
 function hostCall(resolved: { cfg: AppConfig; option: db.ModelOption }, freeIntro: boolean): ResolvedCall {
@@ -84,6 +92,7 @@ function hostCall(resolved: { cfg: AppConfig; option: db.ModelOption }, freeIntr
     priceIn: resolved.option.price_in,
     priceOut: resolved.option.price_out,
     freeIntro,
+    tier: resolveTier(resolved.option.capability_tier, resolved.cfg.model),
   }
 }
 
@@ -104,7 +113,15 @@ async function resolveCall(user: db.User, feature?: FeatureKey): Promise<Resolve
     return hostCall(resolved, false)
   }
   const cfg = await db.getUserConfig(user.id)
-  if (cfg) return { cfg, modelId: null, priceIn: 0, priceOut: 0, freeIntro: false }
+  if (cfg)
+    return {
+      cfg,
+      modelId: null,
+      priceIn: 0,
+      priceOut: 0,
+      freeIntro: false,
+      tier: resolveTier(user.capability_tier, cfg.model),
+    }
   // Hosted free-intro user with nothing configured: the per-feature model (or the global default)
   // powers their free onboarding (gated by the first-impression budget, enforced below).
   if (isHosted && user.plan === 'free-intro') {
@@ -423,7 +440,17 @@ api.get('/health', async (c) => {
 api.get('/config', async (c) => {
   const user = await requireUser(c)
   const cfg = await db.getUserConfig(user.id)
-  return c.json(cfg ? { provider: cfg.provider, model: cfg.model, hasKey: true } : { hasKey: false })
+  return c.json(
+    cfg
+      ? {
+          provider: cfg.provider,
+          model: cfg.model,
+          hasKey: true,
+          // D3: the probed tier, or a name-based fallback so the UI always shows something.
+          capability_tier: resolveTier(user.capability_tier, cfg.model),
+        }
+      : { hasKey: false },
+  )
 })
 
 api.post('/config', async (c) => {
@@ -442,7 +469,11 @@ api.post('/config', async (c) => {
   await db.setUserConfig(user.id, cfg)
   // Bringing your own key is the free 'byok' plan (D11). Local owner stays 'local'.
   if (isHosted) await db.setUserPlan(user.id, 'byok')
-  return c.json({ ok: true, provider: cfg.provider, model: cfg.model })
+  // Probe the model's capability tier once (D3) so budgets + prompt guidance match this key.
+  // Best-effort — a probe failure just leaves the name-based classification to resolve at call time.
+  const tier = await probeTier(cfg).catch(() => classifyByName(cfg.model))
+  await db.setUserCapabilityTier(user.id, tier).catch(() => undefined)
+  return c.json({ ok: true, provider: cfg.provider, model: cfg.model, capability_tier: tier })
 })
 
 // ── auth (hosted mode: email magic-link, no passwords) ───────────────
@@ -510,6 +541,10 @@ api.get('/usage', async (c) => {
   const user = await requireUser(c)
   const tokensUsed = await db.tokensUsed(user.id)
   const impressionsUsed = await db.firstImpressionCount(user.id)
+  // The effective capability tier of the model that would power this user's calls (D3), if any.
+  const tier = await resolveCall(user)
+    .then((call) => call.tier)
+    .catch(() => null)
   return c.json({
     usage: await db.usageSummary(user.id),
     plan: user.plan,
@@ -519,6 +554,7 @@ api.get('/usage', async (c) => {
     // Free-tier "first impression" budget (R32) — replaces the old flat token budget.
     first_impressions_used: impressionsUsed,
     first_impressions_limit: FREE_IMPRESSION_LIMIT,
+    capability_tier: tier,
   })
 })
 
@@ -572,7 +608,13 @@ api.post('/admin/models', async (c) => {
     price_in: body.price_in,
     price_out: body.price_out,
   })
-  return c.json(created)
+  // Probe the model's capability tier once (D3), best-effort. Falls back to a name classification.
+  const resolved = await db.modelConfig(created.id)
+  const tier = resolved
+    ? await probeTier(resolved.cfg).catch(() => classifyByName(created.model))
+    : classifyByName(created.model)
+  await db.setModelCapabilityTier(created.id, tier).catch(() => undefined)
+  return c.json({ ...created, capability_tier: tier })
 })
 
 api.patch('/admin/models/:id', async (c) => {
@@ -1135,7 +1177,9 @@ api.post('/calibration/submit', async (c) => {
 
 // ── interviews ──────────────────────────────────────────────────────
 
-async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promise<string> {
+async function systemFor(interview: db.InterviewRow, tier: Tier, weaknessId?: number): Promise<string> {
+  // Per-tier prompt guidance (D3): compensate a small model / invite depth from a strong one.
+  const guidance = TIERS[tier].guidance
   const profile = await db.getProfile(interview.profile_id)
   if (!profile) throw new HttpError(404, 'profile not found')
   if (interview.kind === 'coaching') {
@@ -1148,7 +1192,7 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
       : weaknesses.find((w) => w.status !== 'resolved')
     if (!target) throw new HttpError(400, 'no open weakness to coach on')
     const body = await db.activePromptBody('coaching.system')
-    return renderCoachingSystem(body, profile, target, interview.mode, userModel?.summary ?? null)
+    return renderCoachingSystem(body, profile, target, interview.mode, userModel?.summary ?? null, guidance)
   }
   const pack = profile.skill_pack ? await db.resolvePublishedPack(profile.skill_pack) : null
   const dom = domainDef(interview.domain)
@@ -1170,6 +1214,7 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
       sampleHrTopics(interview.id),
       claims,
       userModel?.summary ?? null,
+      guidance,
     )
   }
   return renderInterviewSystem(
@@ -1180,6 +1225,7 @@ async function systemFor(interview: db.InterviewRow, weaknessId?: number): Promi
     interview.mode,
     claims,
     userModel?.summary ?? null,
+    guidance,
   )
 }
 
@@ -1225,21 +1271,22 @@ api.post('/interviews', async (c) => {
     `${dom.key} ${body.kind} · ${body.mode}`,
     interview.id,
   )
-  const system = await systemFor(interview, body.weakness_id)
+  const system = await systemFor(interview, call.tier, body.weakness_id)
+  const budget = TIERS[call.tier].interviewMax
   const messages: ChatMessage[] = [{ role: 'user', content: FIRST_MESSAGE_TRIGGER }]
 
   const persist = (opener: string) =>
     db.saveTranscript(interview.id, [{ role: 'assistant', content: opener }])
 
   if (!wantsStream(c)) {
-    const opener = await runModel(user, call, system, messages)
+    const opener = await runModel(user, call, system, messages, budget)
     await persist(opener)
     return c.json({ interview_id: interview.id, message: opener })
   }
 
   return streamSSE(c, async (stream) => {
     try {
-      const opener = await runModel(user, call, system, messages, 4096, (t) => {
+      const opener = await runModel(user, call, system, messages, budget, (t) => {
         void stream.writeSSE({ event: 'delta', data: JSON.stringify(t) })
       })
       await persist(opener)
@@ -1268,7 +1315,8 @@ api.post('/interviews/:id/messages', async (c) => {
   if (preference) await db.recordEvent(interview.profile_id, 'preference', preference, interview.id)
 
   const transcript = [...interview.transcript, { role: 'user', content } as const]
-  const system = await systemFor(interview)
+  const system = await systemFor(interview, call.tier)
+  const budget = TIERS[call.tier].interviewMax
   // The model only ever saw FIRST_MESSAGE_TRIGGER as turn one; replay it so
   // roles alternate user/assistant from the start.
   const messages: ChatMessage[] = [{ role: 'user', content: FIRST_MESSAGE_TRIGGER }, ...transcript]
@@ -1282,13 +1330,13 @@ api.post('/interviews/:id/messages', async (c) => {
   }
 
   if (!wantsStream(c)) {
-    const reply = await runModel(user, call, system, messages)
+    const reply = await runModel(user, call, system, messages, budget)
     return c.json(await persist(reply))
   }
 
   return streamSSE(c, async (stream) => {
     try {
-      const reply = await runModel(user, call, system, messages, 4096, (t) => {
+      const reply = await runModel(user, call, system, messages, budget, (t) => {
         void stream.writeSSE({ event: 'delta', data: JSON.stringify(t) })
       })
       await stream.writeSSE({ event: 'done', data: JSON.stringify(await persist(reply)) })
@@ -1330,7 +1378,7 @@ api.post('/interviews/:id/finish', async (c) => {
         ),
       },
     ],
-    8192,
+    TIERS[call.tier].evalMax,
   )
   const report = extractJson<
     db.InterviewReport & { skill_evidence?: { skill: string; verdict: string; note?: string }[] }

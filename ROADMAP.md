@@ -190,8 +190,17 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - [x] "What we know about you" page (`web/src/pages/Memory.tsx`, topbar 🧠 you) — read the distilled
       model + recent activity, **correct** it by hand (marked `edited`; folded back into the next
       distill), or **delete** it (D6). `GET/PUT/DELETE /api/me/model`, resolves the active profile.
-- [ ] **Capability tiers for BYOK consistency (D3)** — DEFERRED: distinct from personalization (it's
-      about output parity across a $5 Haiku key vs an Opus key). Worth its own slice; flagged at the gate.
+- [x] **Capability tiers for BYOK consistency (D3)** ✅ (2026-07-02) — `server/src/capability.ts`:
+      `Tier` = fast | standard | deep; `classifyByName` maps model families (haiku/mini/flash/8b →
+      fast; opus/o1/o3/gpt-5/70b → deep; else standard) and `probeTier` runs a one-shot strict-JSON
+      instruction-following check that can only *downgrade* a capable-looking name to `fast`. Probed
+      **once** — on `POST /config` (BYOK → `users.capability_tier`) and admin model-create
+      (`models.capability_tier`), migration 0012. `ResolvedCall.tier` (stored ?? name) then sizes token
+      budgets (`TIERS[tier].interviewMax/evalMax`) on interview/messages/finish AND injects a per-tier
+      "MODEL NOTE" into the interview/HR/coaching brief (inside the guardrail frame) — so a small key is
+      nudged to stay tight+complete and a strong one to probe deeper, within the same structure. Tier
+      surfaced in `/config`, `/usage`, and the admin model list. Verified by `scripts/verify-ph4-d3.mjs`
+      + `server/test/capability.test.mjs`; `make check` + `make e2e` green.
 - Verified: `make check` + `make e2e` green; `scripts/verify-ph4.mjs` proves events→distill→inject→
   chips→read/correct/delete end-to-end on the mock provider.
 - **Gate: owner reviews before next phase** (Phase 5 resume/opportunity, Phase 7 learn-while-interviewing,

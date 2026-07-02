@@ -177,6 +177,14 @@ export function Admin({ onBack }: { onBack: () => void }) {
                 </td>
                 <td>
                   {m.provider} · {m.model}
+                  {m.capability_tier && (
+                    <>
+                      {' '}
+                      <span className="badge" title="Probed capability tier (D3)">
+                        {m.capability_tier}
+                      </span>
+                    </>
+                  )}
                 </td>
                 <td>{m.has_key ? '🔑' : '—'}</td>
                 <td>

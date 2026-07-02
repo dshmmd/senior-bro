@@ -122,3 +122,10 @@ One entry per completed milestone. Read this before working on the repo.
   this** one-tap chip; **study plan** (`POST /api/study-plan`, prompt/feature `study.plan`, plan-gated)
   from weaknesses+reports with `weakness_id` linkage → StudyPlan page launches coaching drills. Verified
   by `scripts/verify-ph7.mjs`; `make check` + `make e2e` green. Next = **Phase 4 D3 (capability tiers)**.
+- [2026-07-02 — Phase 4 D3: capability tiers](2026-07-02-phase4-d3-capability-tiers.md) —
+  BYOK output parity. `server/src/capability.ts` (Tier fast/standard/deep, `classifyByName` +
+  one-shot `probeTier` that only downgrades to fast). Probed once → `users.capability_tier` /
+  `models.capability_tier` (migration 0012); `ResolvedCall.tier` sizes token budgets + injects a
+  per-tier "MODEL NOTE" into the interview/HR/coaching brief. Surfaced in /config, /usage, admin
+  models. Verified by `scripts/verify-ph4-d3.mjs` + `capability.test.mjs`. **Finishes the 5→7→4
+  track; all three shipped.** Next = owner's call (infra R26–R30 remain).
