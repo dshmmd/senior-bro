@@ -34,6 +34,7 @@ import {
   renderOpportunityDiscover,
   renderResumeImprove,
   renderResumeParse,
+  renderStudyPlan,
 } from './prompts.js'
 import { extractText } from 'unpdf'
 
@@ -387,6 +388,7 @@ const targetSchema = z.object({
   role: z.string().trim().min(1).max(120).optional(),
 })
 const resumeReviewSchema = z.object({ profile_id: z.number().int().positive() })
+const studyPlanSchema = z.object({ profile_id: z.number().int().positive() })
 const packUpdateSchema = z.object({
   company: z.string().trim().min(1).max(120).optional(),
   summary: z.string().trim().max(500).optional(),
@@ -857,6 +859,36 @@ api.post('/resume/review', async (c) => {
     extractJson<{
       summary: string
       suggestions: { area: string; insight: string; suggested_bullet: string }[]
+    }>(raw),
+  )
+})
+
+// Post-interview study plan (Phase 7): prioritized topics from the profile's gaps, each optionally
+// linked to a weakness so the UI can launch a coaching drill straight from a plan item.
+api.post('/study-plan', async (c) => {
+  const { user, call } = await requireCall(c, 'interview', { feature: 'study.plan' })
+  const { profile_id } = await parseBody(c, studyPlanSchema)
+  const profile = await ownProfile(user.id, profile_id)
+  const [weaknesses, interviews] = await Promise.all([
+    db.listWeaknesses(profile.id),
+    db.listInterviewsForUser(user.id),
+  ])
+  const reports = interviews
+    .filter((i) => i.profile_id === profile.id && i.report !== null)
+    .slice(0, 5)
+    .map((i) => i.report!)
+  const body = await db.activePromptBody('study.plan')
+  const raw = await runModel(
+    user,
+    call,
+    'You build an interview-prep study plan and respond with strict JSON.',
+    [{ role: 'user', content: renderStudyPlan(body, profile, weaknesses, reports) }],
+    1500,
+  )
+  return c.json(
+    extractJson<{
+      overview: string
+      items: { topic: string; focus: string; practice: string; weakness_id: number | null }[]
     }>(raw),
   )
 })

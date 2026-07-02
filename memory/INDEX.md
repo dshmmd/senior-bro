@@ -116,3 +116,9 @@ One entry per completed milestone. Read this before working on the repo.
   (`POST /api/opportunities/target` — ensures pack + repoints profile). All plan-gated like interviews
   (free-intro 402) + metered + R35-routable. Web: **Career tools** page + Dashboard card. Verified by
   `scripts/verify-ph5.mjs`; `make check` + `make e2e` green. Next = **Phase 7** then **Phase 4 D3**.
+- [2026-07-02 — Phase 7: learn-while-interviewing](2026-07-02-phase7-learn-while-interviewing.md) —
+  **Teaching mode** (`teachingBlock()` code-injected into interview + HR system prompts, inside the
+  guardrail frame — socratic micro-lesson then re-ask; asserted in guardrail unit test); **🎓 Teach me
+  this** one-tap chip; **study plan** (`POST /api/study-plan`, prompt/feature `study.plan`, plan-gated)
+  from weaknesses+reports with `weakness_id` linkage → StudyPlan page launches coaching drills. Verified
+  by `scripts/verify-ph7.mjs`; `make check` + `make e2e` green. Next = **Phase 4 D3 (capability tiers)**.

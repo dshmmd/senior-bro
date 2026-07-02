@@ -54,6 +54,11 @@ export const FEATURES: readonly FeatureDef[] = [
     label: 'Opportunity discovery',
     hint: 'Find + match-score live job openings for the candidate (Phase 5).',
   },
+  {
+    key: 'study.plan',
+    label: 'Study plan',
+    hint: 'Build a post-interview study plan from the candidate’s gaps (Phase 7).',
+  },
 ] as const
 
 export type FeatureKey = (typeof FEATURES)[number]['key']

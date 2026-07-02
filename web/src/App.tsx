@@ -10,6 +10,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Interview } from './pages/Interview'
 import { Progress } from './pages/Progress'
 import { Career } from './pages/Career'
+import { StudyPlan } from './pages/StudyPlan'
 import { Memory } from './pages/Memory'
 import { Plan } from './pages/Plan'
 
@@ -25,6 +26,7 @@ export type View =
   | { name: 'dashboard' }
   | { name: 'progress' }
   | { name: 'career' }
+  | { name: 'study' }
   | { name: 'memory' }
   | {
       name: 'interview'
@@ -228,6 +230,7 @@ export function App() {
             onRecalibrate={() => setView({ name: 'calibration' })}
             onOpenProgress={() => setView({ name: 'progress' })}
             onOpenCareer={() => setView({ name: 'career' })}
+            onOpenStudyPlan={() => setView({ name: 'study' })}
           />
         )}
         {view.name === 'progress' && <Progress onBack={() => setView({ name: 'dashboard' })} />}
@@ -236,6 +239,15 @@ export function App() {
             profile={profile}
             onBack={() => setView({ name: 'dashboard' })}
             onTargeted={() => void refresh()}
+          />
+        )}
+        {view.name === 'study' && profile && (
+          <StudyPlan
+            profile={profile}
+            onBack={() => setView({ name: 'dashboard' })}
+            onDrill={(weaknessId) =>
+              setView({ name: 'interview', mode: 'text', kind: 'coaching', domain: 'technical', weaknessId })
+            }
           />
         )}
         {view.name === 'memory' && <Memory onBack={() => setView({ name: 'dashboard' })} />}

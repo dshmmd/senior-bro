@@ -36,9 +36,10 @@ const STEER_CHIPS: { label: string; phrase: string; pref: string }[] = [
     pref: 'wants more behavioral',
   },
   {
-    label: '💡 Explain that',
-    phrase: "I'm not sure I know this — can you explain it before I answer?",
-    pref: 'asked for an explanation',
+    label: '🎓 Teach me this',
+    phrase:
+      "I don't know this well — please teach me: give me a quick intuition and a guiding question, then re-ask so I can try again.",
+    pref: 'asked to be taught (teaching mode)',
   },
 ]
 

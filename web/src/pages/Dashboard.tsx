@@ -20,6 +20,7 @@ export function Dashboard({
   onRecalibrate,
   onOpenProgress,
   onOpenCareer,
+  onOpenStudyPlan,
 }: {
   profile: Profile
   email: string | null
@@ -35,6 +36,7 @@ export function Dashboard({
   onRecalibrate: () => void
   onOpenProgress: () => void
   onOpenCareer: () => void
+  onOpenStudyPlan: () => void
 }) {
   const [history, setHistory] = useState<InterviewSummary[]>([])
   const [weaknesses, setWeaknesses] = useState<Weakness[]>([])
@@ -179,6 +181,21 @@ export function Dashboard({
           <span style={{ fontSize: 22 }}>→</span>
         </div>
       </div>
+
+      {/* Phase 7: post-interview study plan from the user's demonstrated gaps. */}
+      {history.some((h) => h.status === 'finished') && (
+        <div className="card clickable" onClick={onOpenStudyPlan}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <b>📚 Study plan</b>
+              <div style={{ color: 'var(--muted)', fontSize: 14 }}>
+                A prioritized plan from your gaps — drill each straight from the list.
+              </div>
+            </div>
+            <span style={{ fontSize: 22 }}>→</span>
+          </div>
+        </div>
+      )}
 
       {/* Phase 5: résumé boost + job matches driven by interview evidence. */}
       <div className="card clickable" onClick={onOpenCareer}>

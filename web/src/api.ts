@@ -145,6 +145,18 @@ export interface Opportunity {
   url: string | null
 }
 
+// Phase 7 — post-interview study plan.
+export interface StudyPlanItem {
+  topic: string
+  focus: string
+  practice: string
+  weakness_id: number | null
+}
+export interface StudyPlan {
+  overview: string
+  items: StudyPlanItem[]
+}
+
 export interface UserModelInfo {
   profile: { id: number; role: string; company: string | null; level: string | null }
   summary: string
@@ -425,6 +437,7 @@ export const api = {
       company,
       role,
     }),
+  studyPlan: (profile_id: number) => post<StudyPlan>('/study-plan', { profile_id }),
   // personalization: "what we know about you" (D2 / D6)
   getMyModel: () => request<UserModelInfo | null>('/me/model'),
   saveMyModel: (summary: string) =>

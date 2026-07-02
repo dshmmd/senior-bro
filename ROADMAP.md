@@ -224,10 +224,21 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - **Gate: owner reviews before next phase.**
 - Deferred polish: full-screen medal *ceremony* animation on the exact interview where a cluster crystallizes (currently shown as state on the progress page, not a triggered moment).
 
-### Phase 7 — Learn-while-interviewing
-- [ ] Teaching mode: when the user doesn't know a topic, interviewer switches to socratic micro-lesson, then re-asks
-- [ ] Per-question "explain like I'm new" escape hatch (one tap, no typing)
-- [ ] Post-interview study plan generated from gaps; links into coaching drills
+### Phase 7 — Learn-while-interviewing ✅ (2026-07-02)
+- [x] **Teaching mode** — a code-injected `teachingBlock()` in `renderInterviewSystem` +
+      `renderHrSystem` (inside the guardrail frame, applies on every prompt version): when the
+      candidate says they don't know / asks to be taught / clearly can't answer, the interviewer gives
+      a brief socratic micro-lesson (intuition + one guiding question) then re-asks an adapted, easier
+      version before moving on. Asserted structurally in `server/test/guardrail.test.mjs`.
+- [x] **One-tap "teach me" escape hatch** — the interview steering chip is now **🎓 Teach me this**
+      (no typing): sends an explicit teach request that triggers teaching mode + logs the preference.
+- [x] **Post-interview study plan** — `POST /api/study-plan` (prompt/feature `study.plan`, plan-gated
+      like interviews): prioritized `{overview, items[]}` built from open weaknesses (each tagged
+      `[id N]`) + recent reports; items carry a `weakness_id` so the **📚 Study plan** page
+      (`web/src/pages/StudyPlan.tsx`, Dashboard card) launches a coaching drill straight from a plan item.
+- Verified by `scripts/verify-ph7.mjs` (gating, plan items, real weakness-id linkage, cross-user 404) +
+      the guardrail unit test; `make check` + `make e2e` green.
+- **Gate:** owner reviews teaching-mode tone + study-plan usefulness before ship.
 
 ### Phase 8 — Billing & host tokens  ⭐ part of the hosted-deploy priority bundle (R13)
 - [x] **Usage metering**: capture tokens in/out per request from each provider

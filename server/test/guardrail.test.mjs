@@ -120,6 +120,19 @@ test('every guardrailed seed renders inside the frame; others do not carry it', 
   }
 })
 
+test('teaching mode (Phase 7) is injected into interview + HR prompts, inside the frame', () => {
+  const iv = renderInterviewSystem(seedBody('interview.system'), profile, null, [], 'text')
+  const hr = renderHrSystem(seedBody('interview.hr.system'), profile, null, [], 'text', HR_TOPICS)
+  for (const out of [iv, hr]) {
+    assert.ok(out.includes('TEACHING MODE'), 'teaching-mode block is present')
+    const teach = out.indexOf('TEACHING MODE')
+    assert.ok(
+      teach > out.indexOf(GOVERNANCE_MARKER) && teach < out.indexOf(FOOTER_MARKER),
+      'inside the frame',
+    )
+  }
+})
+
 test('placeholders are all filled — no {{TOKEN}} leaks into a rendered prompt', () => {
   const iv = renderInterviewSystem(seedBody('interview.system'), profile, null, [weakness], 'text')
   const hr = renderHrSystem(seedBody('interview.hr.system'), profile, null, [weakness], 'text', HR_TOPICS)

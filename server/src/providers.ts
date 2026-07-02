@@ -423,6 +423,28 @@ function mockReply(system: string, messages: ChatMessage[]): string {
         },
       ],
     })
+  // Phase 7: post-interview study plan; link the first weakness id if the prompt carries one.
+  if (system.includes('study plan')) {
+    const wid = /\[id (\d+)\]/.exec(firstUser)?.[1]
+    return JSON.stringify({
+      overview: 'Your fundamentals are solid; the highest-leverage work is system-design depth this week.',
+      items: [
+        {
+          topic: 'System design capacity estimation',
+          focus:
+            'Back-of-envelope sizing — the gap that keeps design answers high-level for your target role.',
+          practice: 'Estimate QPS + storage for a URL shortener, then a news feed.',
+          weakness_id: wid ? Number(wid) : null,
+        },
+        {
+          topic: 'STAR structure for behavioral answers',
+          focus: 'Quantify impact so your ownership reads clearly.',
+          practice: 'Rewrite two past projects as STAR with a measurable result each.',
+          weakness_id: null,
+        },
+      ],
+    })
+  }
   if (system.includes('calibration questions'))
     return JSON.stringify([
       'What does idempotency mean and why does it matter for APIs?',

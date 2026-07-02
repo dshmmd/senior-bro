@@ -45,8 +45,10 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > *improvement* loop (`POST /api/resume/review`), **job discovery** (`POST /api/opportunities`,
 > web-search on Anthropic), **target-company mode** (`POST /api/opportunities/target` — ensure pack +
 > repoint profile); all plan-gated like interviews + R35-routable; web **Career tools** page. Verified
-> by `scripts/verify-ph5.mjs`. **NEXT: Phase 7 (learn-while-interviewing), then Phase 4 D3 (capability
-> tiers).** See ROADMAP Phases 5/7 + Phase 4.
+> by `scripts/verify-ph5.mjs`. **Phase 7 COMPLETE ✅:** teaching mode (socratic micro-lesson then
+> re-ask, code-injected into interview/HR prompts), 🎓 one-tap "teach me" chip, and a post-interview
+> **study plan** (`POST /api/study-plan`) linked into coaching drills. Verified by `scripts/verify-ph7.mjs`.
+> **NEXT: Phase 4 leftover — D3 capability tiers** (BYOK output parity). See ROADMAP Phases 5/7 + Phase 4.
 
 ## ▶ START HERE — when the owner says "continue"
 
