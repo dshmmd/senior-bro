@@ -40,8 +40,13 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > evaluation reused for HR; **R34** per-domain constellations (`/api/progress` → `{domains:[…]}`, hidden
 > until a domain has a finished interview; Progress-page tabs). Verified by `scripts/verify-ph24.mjs`;
 > `make check` + `make e2e` green. **All owner requirements R1–R36 shipped** except the queued/deferred
-> R26–R30 (admin UX, NL-store D18, k8s deploy, Prometheus/Grafana, server-side STT). **No phase is
-> queued — next work is the owner's call.** See ROADMAP Phases 23–24.
+> R26–R30 (admin UX, NL-store D18, k8s deploy, Prometheus/Grafana, server-side STT).
+> **2026-07-02 owner authorized the Phases 5 → 7 → 4 product track.** **Phase 5 COMPLETE ✅:** résumé
+> *improvement* loop (`POST /api/resume/review`), **job discovery** (`POST /api/opportunities`,
+> web-search on Anthropic), **target-company mode** (`POST /api/opportunities/target` — ensure pack +
+> repoint profile); all plan-gated like interviews + R35-routable; web **Career tools** page. Verified
+> by `scripts/verify-ph5.mjs`. **NEXT: Phase 7 (learn-while-interviewing), then Phase 4 D3 (capability
+> tiers).** See ROADMAP Phases 5/7 + Phase 4.
 
 ## ▶ START HERE — when the owner says "continue"
 

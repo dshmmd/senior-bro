@@ -381,6 +381,48 @@ function mockReply(system: string, messages: ChatMessage[]): string {
       notes: 'Extracted from the résumé (mock).',
     })
   }
+  // Phase 5: résumé-improvement suggestions grounded in interview evidence.
+  if (system.includes('résumé coach'))
+    return JSON.stringify({
+      summary:
+        'Your interviews show stronger system-design judgment than your résumé implies — lead with it.',
+      suggestions: [
+        {
+          area: 'System design',
+          insight:
+            'You reasoned about capacity and trade-offs in interviews but your résumé lists only tools.',
+          suggested_bullet:
+            'Designed and scaled a notification service to handle 10x traffic with back-of-envelope capacity planning.',
+        },
+        {
+          area: 'Ownership',
+          insight: 'You described end-to-end delivery clearly; the résumé frames you as a contributor.',
+          suggested_bullet: 'Owned a project from design through on-call, cutting error rates by half.',
+        },
+      ],
+    })
+  // Phase 5: job-opportunity discovery, match-scored to the profile.
+  if (system.includes('job-search assistant'))
+    return JSON.stringify({
+      opportunities: [
+        {
+          title: 'Senior Backend Engineer',
+          company: 'Northwind',
+          location: 'Remote',
+          match_score: 88,
+          why: 'Matches your Go + Postgres depth and mid-to-senior trajectory.',
+          url: null,
+        },
+        {
+          title: 'Platform Engineer',
+          company: 'Acme',
+          location: 'Berlin',
+          match_score: 74,
+          why: 'Good stack fit; system-design bar is a healthy stretch.',
+          url: null,
+        },
+      ],
+    })
   if (system.includes('calibration questions'))
     return JSON.stringify([
       'What does idempotency mean and why does it matter for APIs?',

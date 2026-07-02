@@ -126,6 +126,25 @@ export interface UserEvent {
   created_at: string
 }
 
+// Phase 5 — résumé improvement + opportunity pipeline.
+export interface ResumeSuggestion {
+  area: string
+  insight: string
+  suggested_bullet: string
+}
+export interface ResumeReview {
+  summary: string
+  suggestions: ResumeSuggestion[]
+}
+export interface Opportunity {
+  title: string
+  company: string
+  location: string
+  match_score: number
+  why: string
+  url: string | null
+}
+
 export interface UserModelInfo {
   profile: { id: number; role: string; company: string | null; level: string | null }
   summary: string
@@ -396,6 +415,16 @@ export const api = {
   listWeaknesses: () => request<Weakness[]>('/weaknesses'),
   setWeaknessStatus: (id: number, status: string) => post(`/weaknesses/${id}/status`, { status }),
   progress: () => request<ProgressResponse>('/progress'),
+  // Phase 5 — résumé improvement + opportunity pipeline
+  resumeReview: (profile_id: number) => post<ResumeReview>('/resume/review', { profile_id }),
+  discoverOpportunities: (profile_id: number, location?: string) =>
+    post<{ opportunities: Opportunity[]; searched: boolean }>('/opportunities', { profile_id, location }),
+  targetOpportunity: (profile_id: number, company: string, role?: string) =>
+    post<{ pack_id: number; company: string; generated: boolean }>('/opportunities/target', {
+      profile_id,
+      company,
+      role,
+    }),
   // personalization: "what we know about you" (D2 / D6)
   getMyModel: () => request<UserModelInfo | null>('/me/model'),
   saveMyModel: (summary: string) =>

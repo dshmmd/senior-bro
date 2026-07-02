@@ -109,3 +109,10 @@ One entry per completed milestone. Read this before working on the repo.
   + evaluation reused for HR (no new axes). **R34** `/api/progress` → per-domain constellations, hidden
   until a domain has a finished interview (Progress-page tabs). Verified by `scripts/verify-ph24.mjs`;
   `make check` + `make e2e` green. **All R1–R36 shipped except queued R26–R30.** Next = **owner's call.**
+- [2026-07-02 — Phase 5: résumé & opportunity pipeline](2026-07-02-phase5-resume-opportunity-pipeline.md) —
+  owner-authorized the 5/7/4 track. Résumé *improvement* (`POST /api/resume/review`, prompt/feature
+  `resume.improve`, grounded in demonstrated claims + reports), **job discovery** (`POST /api/opportunities`,
+  `opportunity.discover`, webSearch on Anthropic, match-scored), **target-company mode**
+  (`POST /api/opportunities/target` — ensures pack + repoints profile). All plan-gated like interviews
+  (free-intro 402) + metered + R35-routable. Web: **Career tools** page + Dashboard card. Verified by
+  `scripts/verify-ph5.mjs`; `make check` + `make e2e` green. Next = **Phase 7** then **Phase 4 D3**.

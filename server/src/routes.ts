@@ -31,6 +31,8 @@ import {
   renderEvaluation,
   renderHrSystem,
   renderInterviewSystem,
+  renderOpportunityDiscover,
+  renderResumeImprove,
   renderResumeParse,
 } from './prompts.js'
 import { extractText } from 'unpdf'
@@ -373,6 +375,18 @@ const packEnsureSchema = z.object({
   company: z.string().trim().min(1).max(120),
   role: z.string().trim().min(1).max(120),
 })
+
+// Phase 5 — opportunity discovery + target-company mode.
+const opportunitySchema = z.object({
+  profile_id: z.number().int().positive(),
+  location: z.string().trim().max(120).optional(),
+})
+const targetSchema = z.object({
+  profile_id: z.number().int().positive(),
+  company: z.string().trim().min(1).max(120),
+  role: z.string().trim().min(1).max(120).optional(),
+})
+const resumeReviewSchema = z.object({ profile_id: z.number().int().positive() })
 const packUpdateSchema = z.object({
   company: z.string().trim().min(1).max(120).optional(),
   summary: z.string().trim().max(500).optional(),
@@ -810,6 +824,94 @@ api.post('/packs/ensure', async (c) => {
     return c.json({ pack_id: existing.id, company: existing.company, generated: false })
   const pack = await generatePack(user, call, company, role)
   return c.json({ pack_id: pack.id, company: pack.company, generated: true, searched: pack.searched })
+})
+
+// ── résumé & opportunity pipeline (Phase 5) ─────────────────────────
+// These are value-adds that build on interview history, so they're plan-gated exactly like
+// interviews (free-intro users must pick a plan first; BYOK/local are free). Each is routed to
+// its own feature model (R35) and metered (R25).
+
+// "Your interviews show more than your résumé says" — suggestions grounded in demonstrated skills.
+api.post('/resume/review', async (c) => {
+  const { user, call } = await requireCall(c, 'interview', { feature: 'resume.improve' })
+  const { profile_id } = await parseBody(c, resumeReviewSchema)
+  const profile = await ownProfile(user.id, profile_id)
+  const [claims, weaknesses, interviews] = await Promise.all([
+    db.listClaims(profile.id),
+    db.listWeaknesses(profile.id),
+    db.listInterviewsForUser(user.id),
+  ])
+  const reports = interviews
+    .filter((i) => i.profile_id === profile.id && i.report !== null)
+    .slice(0, 5)
+    .map((i) => i.report!)
+  const body = await db.activePromptBody('resume.improve')
+  const raw = await runModel(
+    user,
+    call,
+    'You are a résumé coach and respond with strict JSON.',
+    [{ role: 'user', content: renderResumeImprove(body, profile, claims, weaknesses, reports) }],
+    1500,
+  )
+  return c.json(
+    extractJson<{
+      summary: string
+      suggestions: { area: string; insight: string; suggested_bullet: string }[]
+    }>(raw),
+  )
+})
+
+// Discover live openings matched to the profile (web-search-augmented on Anthropic).
+api.post('/opportunities', async (c) => {
+  const { user, call } = await requireCall(c, 'interview', { feature: 'opportunity.discover' })
+  const { profile_id, location } = await parseBody(c, opportunitySchema)
+  const profile = await ownProfile(user.id, profile_id)
+  const body = await db.activePromptBody('opportunity.discover')
+  const webSearch = call.cfg.provider === 'anthropic'
+  const raw = await runModel(
+    user,
+    call,
+    'You are a job-search assistant and respond with strict JSON.',
+    [{ role: 'user', content: renderOpportunityDiscover(body, profile, location ?? '') }],
+    1800,
+    undefined,
+    { webSearch },
+  )
+  const parsed = extractJson<{
+    opportunities: {
+      title: string
+      company: string
+      location: string
+      match_score: number
+      why: string
+      url: string | null
+    }[]
+  }>(raw)
+  const opportunities = Array.isArray(parsed.opportunities) ? parsed.opportunities : []
+  return c.json({ opportunities, searched: webSearch })
+})
+
+// Target-company mode: adopt an opening as this profile's target — ensure its company pack and
+// point the profile at it, so the next interview is tuned to that company/role.
+api.post('/opportunities/target', async (c) => {
+  const { user, call } = await requireCall(c, 'interview', { feature: 'company.pack' })
+  const { profile_id, company, role } = await parseBody(c, targetSchema)
+  const profile = await ownProfile(user.id, profile_id)
+  const targetRole = role ?? profile.role
+  const slug = db.packSlug(company)
+  const existing = await db.getPackBySlug(slug)
+  const pack =
+    existing?.status === 'published' ? existing : await generatePack(user, call, company, targetRole)
+  await db.updateProfile(profile.id, {
+    role: targetRole,
+    company,
+    skill_pack: slug,
+    technologies: profile.technologies,
+    years_experience: profile.years_experience,
+    notes: profile.notes ?? null,
+  })
+  await db.recordEvent(profile.id, 'target_set', `${company} · ${targetRole}`)
+  return c.json({ pack_id: pack.id, company: pack.company, generated: existing?.status !== 'published' })
 })
 
 // ── profile ─────────────────────────────────────────────────────────

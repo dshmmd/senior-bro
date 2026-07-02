@@ -197,14 +197,23 @@ weakness coaching, 4 company packs. See `memory/2026-06-11-v0.1-foundation.md`.
 - **Gate: owner reviews before next phase** (Phase 5 resume/opportunity, Phase 7 learn-while-interviewing,
   or finish Phase 4 with capability tiers).
 
-### Phase 5 — Resume & opportunity pipeline
+### Phase 5 — Resume & opportunity pipeline ✅ (2026-07-02)
 > **R31 (Phase 23) ✅ 2026-07-02 delivered the résumé-intake bullet below**: CV upload + LLM extraction
-> is now the *default* onboarding path (manual Q&A is the fallback/edit). The remaining Phase 5 items
-> (resume *improvement* loop, job discovery, target-posting mode) are still open.
+> is now the *default* onboarding path (manual Q&A is the fallback/edit).
 - [x] Resume intake (PDF/text upload → parsed into profile) — shipped as R31 (Phase 23). PDF via `unpdf`.
-- [ ] Resume improvement loop driven by interview evidence ("you said X in interviews — your resume undersells it")
-- [ ] Job discovery: web search for live openings in the user's country/role; match-scored against profile
-- [ ] Target-company mode: pick a real opening → interview prep tuned to that posting
+- [x] **Resume improvement loop** driven by interview evidence — `POST /api/resume/review` (prompt
+      `resume.improve`, feature `resume.improve`): grounds suggestions in *demonstrated* skill claims
+      (R23) + recent reports + open weaknesses; returns `{summary, suggestions[]}` with concrete bullets.
+- [x] **Job discovery** — `POST /api/opportunities` (prompt `opportunity.discover`, feature
+      `opportunity.discover`): match-scored openings for the profile; **web-search-augmented on Anthropic**
+      (D16). Returns `{opportunities[], searched}`.
+- [x] **Target-company mode** — `POST /api/opportunities/target`: adopt an opening as the profile's
+      target — ensures its company pack (reusing the D10 generate-on-miss pipeline) + repoints the
+      profile (company/role/skill_pack via `db.updateProfile`), so the next interview is tuned to it.
+- All three are **plan-gated like interviews** (free-intro → 402; BYOK/local free) + metered (R25) +
+      per-feature routable (R35). Web: **Career tools** page (`web/src/pages/Career.tsx`, Dashboard card).
+      Verified by `scripts/verify-ph5.mjs`; `make check` + `make e2e` green.
+- **Gate:** owner reviews the résumé-suggestion tone + opportunity match quality before ship.
 
 ### Phase 6 — Progress visualization & gamification (BAD-ASS edition) ✅ (2026-06-24)
 - [x] Constellation skill map (D7): canvas star field, 5 dimension clusters light as interviews cover skills

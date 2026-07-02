@@ -19,6 +19,7 @@ export function Dashboard({
   onProfileSwitched,
   onRecalibrate,
   onOpenProgress,
+  onOpenCareer,
 }: {
   profile: Profile
   email: string | null
@@ -33,6 +34,7 @@ export function Dashboard({
   onProfileSwitched: () => void
   onRecalibrate: () => void
   onOpenProgress: () => void
+  onOpenCareer: () => void
 }) {
   const [history, setHistory] = useState<InterviewSummary[]>([])
   const [weaknesses, setWeaknesses] = useState<Weakness[]>([])
@@ -172,6 +174,19 @@ export function Dashboard({
             <b>🌌 Your constellation</b>
             <div style={{ color: 'var(--muted)', fontSize: 14 }}>
               Light up every skill, heal your weaknesses, earn medals — track it all here.
+            </div>
+          </div>
+          <span style={{ fontSize: 22 }}>→</span>
+        </div>
+      </div>
+
+      {/* Phase 5: résumé boost + job matches driven by interview evidence. */}
+      <div className="card clickable" onClick={onOpenCareer}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <b>🚀 Career tools</b>
+            <div style={{ color: 'var(--muted)', fontSize: 14 }}>
+              Boost your résumé from what you&apos;ve proven, and find matched job openings to target.
             </div>
           </div>
           <span style={{ fontSize: 22 }}>→</span>

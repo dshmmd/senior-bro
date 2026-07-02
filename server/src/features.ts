@@ -44,6 +44,16 @@ export const FEATURES: readonly FeatureDef[] = [
     label: 'User-model distillation',
     hint: 'Summarize what we know about the candidate after each interview.',
   },
+  {
+    key: 'resume.improve',
+    label: 'Résumé improvement',
+    hint: 'Suggest résumé improvements from interview evidence (Phase 5).',
+  },
+  {
+    key: 'opportunity.discover',
+    label: 'Opportunity discovery',
+    hint: 'Find + match-score live job openings for the candidate (Phase 5).',
+  },
 ] as const
 
 export type FeatureKey = (typeof FEATURES)[number]['key']

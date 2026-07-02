@@ -9,6 +9,7 @@ import { Calibration } from './pages/Calibration'
 import { Dashboard } from './pages/Dashboard'
 import { Interview } from './pages/Interview'
 import { Progress } from './pages/Progress'
+import { Career } from './pages/Career'
 import { Memory } from './pages/Memory'
 import { Plan } from './pages/Plan'
 
@@ -23,6 +24,7 @@ export type View =
   | { name: 'plan' }
   | { name: 'dashboard' }
   | { name: 'progress' }
+  | { name: 'career' }
   | { name: 'memory' }
   | {
       name: 'interview'
@@ -225,9 +227,17 @@ export function App() {
             onProfileSwitched={() => void refresh()}
             onRecalibrate={() => setView({ name: 'calibration' })}
             onOpenProgress={() => setView({ name: 'progress' })}
+            onOpenCareer={() => setView({ name: 'career' })}
           />
         )}
         {view.name === 'progress' && <Progress onBack={() => setView({ name: 'dashboard' })} />}
+        {view.name === 'career' && profile && (
+          <Career
+            profile={profile}
+            onBack={() => setView({ name: 'dashboard' })}
+            onTargeted={() => void refresh()}
+          />
+        )}
         {view.name === 'memory' && <Memory onBack={() => setView({ name: 'dashboard' })} />}
         {view.name === 'interview' && profile && (
           <Interview
