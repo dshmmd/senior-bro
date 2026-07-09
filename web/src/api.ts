@@ -3,7 +3,10 @@
 // Re-exported here so pages keep importing from './api' / '../api'.
 export type * from '@senior-bro/shared'
 import type {
+  AdminEvent,
   AdminUserRow,
+  FeatureAssignment,
+  UsageEventRow,
   CompanyPack,
   FeatureDef,
   Health,
@@ -256,12 +259,21 @@ export const api = {
   adminRevokeInvite: (code: string) =>
     post<{ ok: boolean }>(`/admin/invites/${encodeURIComponent(code)}/revoke`, {}),
   adminFeatureModels: () =>
-    request<{ features: FeatureDef[]; assignments: Record<string, number | null> }>('/admin/feature-models'),
-  adminSetFeatureModel: (key: string, model_id: number | null) =>
+    request<{ features: FeatureDef[]; assignments: Record<string, FeatureAssignment> }>(
+      '/admin/feature-models',
+    ),
+  adminSetFeatureModel: (key: string, patch: { model_id?: number | null; disabled?: boolean }) =>
     request<{ ok: boolean }>(`/admin/feature-models/${encodeURIComponent(key)}`, {
       method: 'PUT',
-      body: JSON.stringify({ model_id }),
+      body: JSON.stringify(patch),
     }),
+  adminSuspendUser: (id: number, suspended: boolean) =>
+    post<{ ok: boolean }>(`/admin/users/${id}/suspend`, { suspended }),
+  adminUsageEvents: (userId?: number, limit = 200) =>
+    request<UsageEventRow[]>(
+      `/admin/usage-events?limit=${limit}${userId !== undefined ? `&user_id=${userId}` : ''}`,
+    ),
+  adminEvents: (limit = 200) => request<AdminEvent[]>(`/admin/events?limit=${limit}`),
   adminListPrompts: () => request<PromptCatalogEntry[]>('/admin/prompts'),
   adminPromptVersions: (key: string) => request<PromptVersion[]>(`/admin/prompts/${encodeURIComponent(key)}`),
   adminSavePrompt: (key: string, body: string) =>

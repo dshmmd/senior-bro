@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   api,
   type AdminUserRow,
+  type FeatureAssignment,
   type CompanyPack,
   type FeatureDef,
   type InviteCode,
@@ -33,7 +34,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [invites, setInvites] = useState<InviteCode[]>([])
   const [features, setFeatures] = useState<FeatureDef[]>([])
-  const [featureAssignments, setFeatureAssignments] = useState<Record<string, number | null>>({})
+  const [featureAssignments, setFeatureAssignments] = useState<Record<string, FeatureAssignment>>({})
   const [form, setForm] = useState({ ...blankForm })
   const [invite, setInvite] = useState({ token_credit: 500_000, note: '', expires_in_days: '' })
   const [busy, setBusy] = useState(false)
@@ -108,7 +109,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
   const assignFeature = async (key: string, value: string) => {
     const modelId = value === '' ? null : Number(value)
     await api
-      .adminSetFeatureModel(key, modelId)
+      .adminSetFeatureModel(key, { model_id: modelId })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
     await load()
   }
@@ -335,7 +336,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
                 </td>
                 <td>
                   <select
-                    value={featureAssignments[f.key] ?? ''}
+                    value={featureAssignments[f.key]?.model_id ?? ''}
                     onChange={(e) => void assignFeature(f.key, e.target.value)}
                   >
                     <option value="">Global default</option>

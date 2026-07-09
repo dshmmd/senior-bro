@@ -22,6 +22,8 @@ export async function requireUser(c: Context): Promise<db.User> {
   const token = getCookie(c, SESSION_COOKIE)
   const user = token ? await db.userForSession(token) : null
   if (!user) throw new HttpError(401, 'sign in required')
+  // RF-9: a suspended account fails every authenticated request until an admin lifts it.
+  if (user.suspended) throw new HttpError(403, 'this account is suspended — contact support')
   return user
 }
 

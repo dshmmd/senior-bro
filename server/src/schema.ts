@@ -48,6 +48,9 @@ export const users = pgTable('users', {
   activeProfileId: integer('active_profile_id').references((): AnyPgColumn => profiles.id, {
     onDelete: 'set null',
   }),
+  // Admin moderation (RF-9): a suspended user fails every authenticated request with 403
+  // until un-suspended. Data is kept intact; nothing cascades.
+  suspended: boolean('suspended').notNull().default(false),
   createdAt: createdAt(),
 })
 
@@ -303,8 +306,26 @@ export const companyPacks = pgTable(
 export const featureModels = pgTable('feature_models', {
   featureKey: text('feature_key').primaryKey(),
   modelId: integer('model_id').references(() => models.id, { onDelete: 'set null' }),
+  // Kill switch (RF-9): a disabled feature fails fast (503) on platform-funded calls before any
+  // model is invoked — no redeploy needed when a provider/feature misbehaves. BYOK is unaffected.
+  disabled: boolean('disabled').notNull().default(false),
   updatedAt: timestamp('updated_at', { mode: 'string' }).notNull().defaultNow(),
 })
+
+// Admin-action audit log (RF-9 / R26): one row per admin mutation (model CRUD/key rotation,
+// feature routing, quotas, suspend, invites, prompt versions, pack edits) — who did what, when.
+export const adminEvents = pgTable(
+  'admin_events',
+  {
+    id: serial('id').primaryKey(),
+    adminId: integer('admin_id').references(() => users.id, { onDelete: 'set null' }),
+    adminEmail: text('admin_email'),
+    action: text('action').notNull(),
+    detail: text('detail').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [index('admin_events_created_idx').on(t.createdAt)],
+)
 
 // Admin-minted invite codes (D11 / Phase 13). Each carries a token-denominated credit
 // (Q3); redeeming adds it to the redeemer's quota and upgrades them to the 'host' plan.

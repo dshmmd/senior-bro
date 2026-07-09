@@ -70,8 +70,13 @@ function hostCall(resolved: { cfg: AppConfig; option: db.ModelOption }, freeIntr
  */
 export async function resolveCall(user: db.User, feature?: FeatureKey): Promise<ResolvedCall> {
   const routedId = feature ? await db.assignedFeatureModel(feature) : null
+  // Kill switch (RF-9): an admin-disabled feature fails fast on platform-funded calls —
+  // no model is invoked, no tokens burn. BYOK/CLI users run on their own key and are unaffected
+  // (their branch below returns before this matters, since `killed` only throws on host paths).
+  const killed = feature ? await db.featureDisabled(feature) : false
 
   if (user.model_id !== null) {
+    if (killed) throw new HttpError(503, 'this feature is temporarily disabled by the administrator')
     // Host plan: the user's curated model, unless the admin routed this feature elsewhere.
     const routed = routedId ? await db.modelConfig(routedId) : null
     const resolved = routed ?? (await db.modelConfig(user.model_id))
@@ -92,6 +97,7 @@ export async function resolveCall(user: db.User, feature?: FeatureKey): Promise<
   // Hosted free-intro user with nothing configured: the per-feature model (or the global default)
   // powers their free onboarding (gated by the first-impression budget, enforced below).
   if (isHosted && user.plan === 'free-intro') {
+    if (killed) throw new HttpError(503, 'this feature is temporarily disabled by the administrator')
     const routed = routedId ? await db.modelConfig(routedId) : null
     const resolved =
       routed ??
@@ -180,6 +186,9 @@ export async function callForInterview(user: db.User, interview: db.InterviewRow
  * `voice.transcribe`, so the caller can offer the browser-STT fallback instead of erroring.
  */
 export async function resolveTranscribeCall(): Promise<ResolvedCall | null> {
+  // Kill switch (RF-9): a disabled voice feature reads as "not configured" — the client
+  // silently falls back to browser dictation instead of erroring the user's mic.
+  if (await db.featureDisabled('voice.transcribe')) return null
   const routedId = await db.assignedFeatureModel('voice.transcribe')
   if (!routedId) return null
   const resolved = await db.modelConfig(routedId)

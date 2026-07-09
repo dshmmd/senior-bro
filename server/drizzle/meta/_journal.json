@@ -92,6 +92,13 @@
       "when": 1782978789292,
       "tag": "0012_fair_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783620559080,
+      "tag": "0013_sturdy_raider",
+      "breakpoints": true
     }
   ]
 }

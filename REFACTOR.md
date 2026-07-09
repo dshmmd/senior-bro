@@ -306,20 +306,36 @@ Fixes W6. Rides on RF-5 (router) + RF-6 (components).
   spectacle; senior/staff → restrained premium: glow, count-up, chime).
 
 #### RF-9 · Admin console v2 — L
-Fixes W12; implements queued R26 and the audit half of R25.
-- [ ] Split `Admin.tsx` into routed sub-pages (rides RF-5): Models & pricing,
-      Feature routing, Prompts, Packs, Users, Invites, Usage.
-- [ ] Prompts: side-by-side **diff/compare** between versions, rendered-frame
-      preview, one-tap activate/rollback (R26b).
-- [ ] Usage: per-event audit table (who/when/feature/model/tokens/cost) with
-      filters + CSV export (R25 leftover); per-user drill-down.
-- [ ] Users: suspend/unsuspend, quota edit with period support (see RF-11),
-      plan override, admin-action **audit log** table (new `admin_events`).
-- [ ] Kill switches: per-provider and per-feature disable flags (a stuck gateway
-      shouldn't need a redeploy) — new `feature_flags` or a column on
-      `feature_models`.
-- **Gate:** owner performs: rotate a key, reroute a feature, diff+rollback a
-  prompt, audit a user's spend, suspend a user — all without touching code.
+Fixes W12; implements queued R26 and the audit half of R25. **Build in two slices:**
+
+**Slice 1 — server capabilities** ✅ 2026-07-09 (migration 0013 `admin_events` +
+`users.suspended` + `feature_models.disabled`; locked by `scripts/verify-admin-v2.mjs`
+in the CI integration suite; `verify-ph35.mjs` updated to the new assignment shape):
+- [x] `users.suspended` (bool, default false) — `requireUser` rejects a suspended
+      user (403) on every route; `POST /api/admin/users/:id/suspend`.
+- [x] `admin_events` table (admin id/email, action, detail, created_at) — every
+      admin mutation (model CRUD, key rotation, feature routing, quota, suspend,
+      invites, prompt versions, pack edits) records one; `GET /api/admin/events`.
+- [x] Per-event usage audit: `GET /api/admin/usage-events?user_id=&limit=`
+      (who/when/provider/model/tokens in-out/cost, newest first) — R25 leftover.
+- [x] Kill switch: `feature_models.disabled` (also: a killed `voice.transcribe`
+      reads as unavailable → silent browser-STT fallback) — a disabled feature fails fast with
+      a clear 503 before any model call (`PUT /api/admin/feature-models/:key`
+      gains `{disabled}`); BYOK/local unaffected.
+
+**Slice 2 — web console** (rides RF-5 routing + RF-6 components):
+- [ ] Split `Admin.tsx` into routed sub-pages: `/admin` (nav cards) →
+      `/admin/models`, `/admin/features`, `/admin/users`, `/admin/invites`,
+      `/admin/prompts`, `/admin/packs`, `/admin/usage` (audit), `/admin/audit`.
+- [ ] Prompts: side-by-side **diff/compare** between versions (small dependency-
+      free line-diff), one-tap activate/rollback (R26b).
+- [ ] Usage: per-event audit table with user filter + CSV export; per-user
+      drill-down from the users list.
+- [ ] Users: suspend/unsuspend button, quota edit (proper field, not
+      window.prompt), plan shown; audit-log page.
+- **Gate:** owner performs: rotate a key, reroute a feature, kill a feature,
+  diff+rollback a prompt, audit a user's spend, suspend a user — all without
+  touching code.
 
 #### RF-10 · Interview room polish — M
 The core product surface; rides RF-6.

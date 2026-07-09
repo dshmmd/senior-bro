@@ -45,6 +45,41 @@ export async function recordUsage(e: {
   })
 }
 
+/** One metered call, admin-auditable (RF-9 / R25): who, when, which model, tokens, cost. */
+export interface UsageEventRow {
+  id: number
+  user_id: number
+  email: string | null
+  provider: string
+  model: string
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+  created_at: string
+}
+
+/** Per-event usage audit, newest first — optionally filtered to one user (RF-9 / R25). */
+export async function listUsageEvents(userId?: number, limit = 200): Promise<UsageEventRow[]> {
+  const base = db
+    .select({ e: t.usageEvents, email: t.users.email })
+    .from(t.usageEvents)
+    .innerJoin(t.users, eq(t.users.id, t.usageEvents.userId))
+  const rows = await (userId !== undefined ? base.where(eq(t.usageEvents.userId, userId)) : base)
+    .orderBy(desc(t.usageEvents.id))
+    .limit(limit)
+  return rows.map(({ e, email }) => ({
+    id: e.id,
+    user_id: e.userId,
+    email,
+    provider: e.provider,
+    model: e.model,
+    input_tokens: e.inputTokens,
+    output_tokens: e.outputTokens,
+    cost_usd: e.costUsd,
+    created_at: e.createdAt,
+  }))
+}
+
 // Aggregates are cast in SQL (::int / ::float8) so node-postgres returns real JS
 // numbers — without the cast, SUM/COUNT come back as bigint strings.
 /** Total tokens (in+out) a user has consumed — the figure quotas are checked against. */

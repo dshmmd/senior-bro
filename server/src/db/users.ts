@@ -15,6 +15,7 @@ export interface User {
   token_quota: number | null
   active_profile_id: number | null
   capability_tier: string | null
+  suspended: boolean
   created_at: string
 }
 
@@ -35,8 +36,14 @@ function toUser(r: UserRow): User {
     token_quota: r.tokenQuota,
     active_profile_id: r.activeProfileId,
     capability_tier: r.capabilityTier,
+    suspended: r.suspended,
     created_at: r.createdAt,
   }
+}
+
+/** Suspend / un-suspend an account (RF-9). Data stays intact; auth rejects while suspended. */
+export async function setUserSuspended(userId: number, suspended: boolean): Promise<void> {
+  await db.update(t.users).set({ suspended }).where(eq(t.users.id, userId))
 }
 
 /** Store a BYOK user's probed capability tier (D3). */

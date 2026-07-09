@@ -34,6 +34,7 @@ const SCRIPTS = [
   'verify-ph7.mjs', // Phase 7 study plan + gating + weakness linkage
   'verify-model-readiness.mjs', // R39 /health.interview_ready counts a selected model
   'verify-admin-entitlement.mjs', // admins are staff (un-metered) + résumé error surface
+  'verify-admin-v2.mjs', // RF-9 slice 1: suspend, audit log, usage audit, kill switch
   'verify-arvan.mjs', // D19 Arvan wire format + usage parsing (stub gateway, no DB)
 ]
 

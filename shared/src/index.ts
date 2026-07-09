@@ -291,6 +291,8 @@ export interface AdminUserRow {
   id: number
   email: string | null
   role: 'user' | 'admin'
+  plan: PlanKind
+  suspended: boolean
   model_id: number | null
   token_quota: number | null
   input_tokens: number
@@ -298,4 +300,33 @@ export interface AdminUserRow {
   total_tokens: number
   cost_usd: number
   events: number
+}
+
+/** A feature's routing row (R35) + kill switch (RF-9). */
+export interface FeatureAssignment {
+  model_id: number | null
+  disabled: boolean
+}
+
+/** One metered model call, admin-auditable (RF-9 / R25). */
+export interface UsageEventRow {
+  id: number
+  user_id: number
+  email: string | null
+  provider: string
+  model: string
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+  created_at: string
+}
+
+/** One admin action in the audit log (RF-9 / R26). */
+export interface AdminEvent {
+  id: number
+  admin_id: number | null
+  admin_email: string | null
+  action: string
+  detail: string
+  created_at: string
 }

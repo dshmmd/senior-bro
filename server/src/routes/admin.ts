@@ -44,8 +44,13 @@ const modelUpdateSchema = z.object({
 })
 
 // null clears a feature's assignment (→ global default). (R35 / D23)
-const featureModelSchema = z.object({ model_id: z.number().int().positive().nullable() })
+// Partial: omitted fields keep their current value. `disabled` = the RF-9 kill switch.
+const featureModelSchema = z.object({
+  model_id: z.number().int().positive().nullable().optional(),
+  disabled: z.boolean().optional(),
+})
 const quotaSchema = z.object({ token_quota: z.number().int().min(0).nullable() })
+const suspendSchema = z.object({ suspended: z.boolean() })
 
 const inviteCreateSchema = z.object({
   token_credit: z.number().int().min(1).max(1_000_000_000),
@@ -72,6 +77,15 @@ function promptKeyOf(c: Context): (typeof promptKeys)[number] {
   return key
 }
 
+/** Best-effort admin audit entry (RF-9) — a log failure must never fail the admin action. */
+function audit(admin: db.User, action: string, detail: string): void {
+  void db
+    .recordAdminEvent({ adminId: admin.id, adminEmail: admin.email, action, detail })
+    .catch((err: unknown) =>
+      console.error(JSON.stringify({ level: 'warn', msg: 'audit failed', err: String(err) })),
+    )
+}
+
 export function registerAdminRoutes(api: Hono): void {
   // ── model/key management ────────────────────────────────────────────
 
@@ -81,7 +95,7 @@ export function registerAdminRoutes(api: Hono): void {
   })
 
   api.post('/admin/models', async (c) => {
-    await requireAdmin(c)
+    const admin = await requireAdmin(c)
     const body = await parseBody(c, modelCreateSchema)
     // Validate the key works before saving (mock needs none).
     if (body.provider !== 'mock') {
@@ -110,11 +124,12 @@ export function registerAdminRoutes(api: Hono): void {
       ? await probeTier(resolved.cfg).catch(() => classifyByName(created.model))
       : classifyByName(created.model)
     await db.setModelCapabilityTier(created.id, tier).catch(() => undefined)
+    audit(admin, 'model.create', `#${created.id} ${body.label} (${body.provider}/${body.model})`)
     return c.json({ ...created, capability_tier: tier })
   })
 
   api.patch('/admin/models/:id', async (c) => {
-    await requireAdmin(c)
+    const admin = await requireAdmin(c)
     const id = Number(c.req.param('id'))
     const body = await parseBody(c, modelUpdateSchema)
     const updated = await db.updateModel(id, {
@@ -127,12 +142,21 @@ export function registerAdminRoutes(api: Hono): void {
       apiKey: body.apiKey?.trim(),
     })
     if (!updated) throw new HttpError(404, 'model not found')
+    audit(
+      admin,
+      'model.update',
+      `#${id} ${Object.keys(body)
+        .map((k) => (k === 'apiKey' ? 'apiKey(rotated)' : k))
+        .join(',')}`,
+    )
     return c.json(updated)
   })
 
   api.delete('/admin/models/:id', async (c) => {
-    await requireAdmin(c)
-    await db.deleteModel(Number(c.req.param('id')))
+    const admin = await requireAdmin(c)
+    const id = Number(c.req.param('id'))
+    await db.deleteModel(id)
+    audit(admin, 'model.delete', `#${id}`)
     return c.json({ ok: true })
   })
 
@@ -146,12 +170,16 @@ export function registerAdminRoutes(api: Hono): void {
 
   // Assign a model to a feature (or clear it with model_id: null → falls back to the global default).
   api.put('/admin/feature-models/:key', async (c) => {
-    await requireAdmin(c)
+    const admin = await requireAdmin(c)
     const key = c.req.param('key')
     if (!isFeatureKey(key)) throw new HttpError(404, 'unknown feature key')
-    const { model_id } = await parseBody(c, featureModelSchema)
-    if (model_id !== null && !(await db.getModel(model_id))) throw new HttpError(404, 'model not found')
-    await db.setFeatureModel(key, model_id)
+    const body = await parseBody(c, featureModelSchema)
+    const current = (await db.listFeatureModels())[key] ?? { model_id: null, disabled: false }
+    const modelId = body.model_id !== undefined ? body.model_id : current.model_id
+    const disabled = body.disabled ?? current.disabled
+    if (modelId !== null && !(await db.getModel(modelId))) throw new HttpError(404, 'model not found')
+    await db.setFeatureModel(key, modelId, disabled)
+    audit(admin, 'feature.route', `${key} → model ${modelId ?? 'default'}${disabled ? ' (KILLED)' : ''}`)
     return c.json({ ok: true })
   })
 
@@ -165,6 +193,8 @@ export function registerAdminRoutes(api: Hono): void {
         id: u.id,
         email: u.email,
         role: u.role,
+        plan: u.plan,
+        suspended: u.suspended,
         model_id: u.model_id,
         token_quota: u.token_quota,
         ...(await db.usageSummary(u.id)),
@@ -174,10 +204,40 @@ export function registerAdminRoutes(api: Hono): void {
   })
 
   api.post('/admin/users/:id/quota', async (c) => {
-    await requireAdmin(c)
+    const admin = await requireAdmin(c)
+    const id = Number(c.req.param('id'))
     const { token_quota } = await parseBody(c, quotaSchema)
-    await db.setUserQuota(Number(c.req.param('id')), token_quota)
+    await db.setUserQuota(id, token_quota)
+    audit(admin, 'user.quota', `#${id} → ${token_quota ?? 'unlimited'}`)
     return c.json({ ok: true })
+  })
+
+  // Suspend / un-suspend an account (RF-9). Suspended users fail every request with 403.
+  api.post('/admin/users/:id/suspend', async (c) => {
+    const admin = await requireAdmin(c)
+    const id = Number(c.req.param('id'))
+    if (id === admin.id) throw new HttpError(400, "you can't suspend your own account")
+    const { suspended } = await parseBody(c, suspendSchema)
+    if (!(await db.getUser(id))) throw new HttpError(404, 'user not found')
+    await db.setUserSuspended(id, suspended)
+    audit(admin, suspended ? 'user.suspend' : 'user.unsuspend', `#${id}`)
+    return c.json({ ok: true })
+  })
+
+  // Per-event usage audit (RF-9 / R25): who/when/model/tokens/cost, newest first.
+  api.get('/admin/usage-events', async (c) => {
+    await requireAdmin(c)
+    const userIdRaw = c.req.query('user_id')
+    const userId = userIdRaw ? Number(userIdRaw) : undefined
+    const limit = Math.min(Number(c.req.query('limit') ?? 200) || 200, 1000)
+    return c.json(await db.listUsageEvents(userId, limit))
+  })
+
+  // Admin-action audit log (RF-9 / R26).
+  api.get('/admin/events', async (c) => {
+    await requireAdmin(c)
+    const limit = Math.min(Number(c.req.query('limit') ?? 200) || 200, 1000)
+    return c.json(await db.listAdminEvents(limit))
   })
 
   // ── invite codes (token-credit codes for testers/partners) ──────────
@@ -188,7 +248,7 @@ export function registerAdminRoutes(api: Hono): void {
   })
 
   api.post('/admin/invites', async (c) => {
-    await requireAdmin(c)
+    const admin = await requireAdmin(c)
     const body = await parseBody(c, inviteCreateSchema)
     const code = `SB-${randomToken(4).toUpperCase()}`
     const created = await db.createInviteCode({
@@ -197,12 +257,15 @@ export function registerAdminRoutes(api: Hono): void {
       note: body.note ?? null,
       expiresInDays: body.expires_in_days,
     })
+    audit(admin, 'invite.mint', `${code} (${body.token_credit} tokens)`)
     return c.json(created)
   })
 
   api.post('/admin/invites/:code/revoke', async (c) => {
-    await requireAdmin(c)
-    await db.revokeInviteCode(c.req.param('code'))
+    const admin = await requireAdmin(c)
+    const code = c.req.param('code')
+    await db.revokeInviteCode(code)
+    audit(admin, 'invite.revoke', code)
     return c.json({ ok: true })
   })
 
@@ -241,16 +304,18 @@ export function registerAdminRoutes(api: Hono): void {
     const key = promptKeyOf(c)
     const { body } = await parseBody(c, promptVersionSchema)
     const created = await db.createPromptVersion(key, body, admin.email ?? `user#${admin.id}`)
+    audit(admin, 'prompt.version', `${key} v${created.version}`)
     return c.json(created)
   })
 
   /** Roll back / forward by re-activating an existing version. */
   api.post('/admin/prompts/:key/activate', async (c) => {
-    await requireAdmin(c)
+    const admin = await requireAdmin(c)
     const key = promptKeyOf(c)
     const { version } = await parseBody(c, promptActivateSchema)
     const ok = await db.activatePromptVersion(key, version)
     if (!ok) throw new HttpError(404, 'no such prompt version')
+    audit(admin, 'prompt.activate', `${key} → v${version}`)
     return c.json({ ok: true })
   })
 
@@ -262,10 +327,11 @@ export function registerAdminRoutes(api: Hono): void {
   })
 
   api.patch('/admin/packs/:id', async (c) => {
-    await requireAdmin(c)
+    const admin = await requireAdmin(c)
     const patch = await parseBody(c, packUpdateSchema)
     const updated = await db.updatePack(Number(c.req.param('id')), patch)
     if (!updated) throw new HttpError(404, 'pack not found')
+    audit(admin, 'pack.update', `#${updated.id} ${updated.company} [${Object.keys(patch).join(',')}]`)
     return c.json(updated)
   })
 
@@ -288,8 +354,10 @@ export function registerAdminRoutes(api: Hono): void {
   })
 
   api.delete('/admin/packs/:id', async (c) => {
-    await requireAdmin(c)
-    await db.deletePack(Number(c.req.param('id')))
+    const admin = await requireAdmin(c)
+    const id = Number(c.req.param('id'))
+    await db.deletePack(id)
+    audit(admin, 'pack.delete', `#${id}`)
     return c.json({ ok: true })
   })
 }

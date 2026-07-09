@@ -82,22 +82,41 @@ export async function assignedFeatureModel(featureKey: string): Promise<number |
   return model?.enabled ? model.id : null
 }
 
-/** Every feature's current assignment (raw model_id, including disabled/missing) for the admin UI. */
-export async function listFeatureModels(): Promise<Record<string, number | null>> {
+/** A feature's routing row for the admin UI: assigned model + kill switch (RF-9). */
+export interface FeatureAssignment {
+  model_id: number | null
+  disabled: boolean
+}
+
+/** Whether an admin flipped this feature's kill switch (RF-9). Missing row = enabled. */
+export async function featureDisabled(featureKey: string): Promise<boolean> {
+  const [row] = await db
+    .select({ disabled: t.featureModels.disabled })
+    .from(t.featureModels)
+    .where(eq(t.featureModels.featureKey, featureKey))
+  return row?.disabled ?? false
+}
+
+/** Every feature's current assignment (raw model_id + kill switch) for the admin UI. */
+export async function listFeatureModels(): Promise<Record<string, FeatureAssignment>> {
   const rows = await db.select().from(t.featureModels)
-  const map: Record<string, number | null> = {}
-  for (const r of rows) map[r.featureKey] = r.modelId
+  const map: Record<string, FeatureAssignment> = {}
+  for (const r of rows) map[r.featureKey] = { model_id: r.modelId, disabled: r.disabled }
   return map
 }
 
-/** Assign (or clear, with null) the model that powers a feature. Upserts on the feature key. */
-export async function setFeatureModel(featureKey: string, modelId: number | null): Promise<void> {
+/** Assign the model powering a feature (null → global default) and/or its kill switch. Upserts. */
+export async function setFeatureModel(
+  featureKey: string,
+  modelId: number | null,
+  disabled = false,
+): Promise<void> {
   await db
     .insert(t.featureModels)
-    .values({ featureKey, modelId, updatedAt: new Date().toISOString() })
+    .values({ featureKey, modelId, disabled, updatedAt: new Date().toISOString() })
     .onConflictDoUpdate({
       target: t.featureModels.featureKey,
-      set: { modelId, updatedAt: new Date().toISOString() },
+      set: { modelId, disabled, updatedAt: new Date().toISOString() },
     })
 }
 

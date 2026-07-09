@@ -66,7 +66,10 @@ try {
     Array.isArray(cat.json.features) && cat.json.features.some((f) => f.key === 'calibration'),
     'feature catalogue lists calibration (and friends)',
   )
-  assert(cat.json.assignments.calibration == null, 'calibration starts unassigned (→ global default)')
+  assert(
+    cat.json.assignments.calibration?.model_id == null,
+    'calibration starts unassigned (→ global default)',
+  )
 
   const badKey = await call('PUT', '/api/admin/feature-models/nope', { model_id: null }, admin.cookie)
   assert(badKey.status === 404, 'unknown feature key is rejected (404)')
@@ -94,7 +97,7 @@ try {
   )
   assert(assign.status === 200, 'admin routed calibration → the priced model')
   const cat2 = await call('GET', '/api/admin/feature-models', undefined, admin.cookie)
-  assert(cat2.json.assignments.calibration === premium.json.id, 'assignment round-trips')
+  assert(cat2.json.assignments.calibration?.model_id === premium.json.id, 'assignment round-trips')
 
   // A fresh free-intro user's calibration now runs on the priced model → cost > 0.
   const u2 = await signIn(`b-${uniq}@ph35.test`)
@@ -107,7 +110,10 @@ try {
   const clear = await call('PUT', '/api/admin/feature-models/calibration', { model_id: null }, admin.cookie)
   assert(clear.status === 200, 'admin cleared the calibration assignment')
   const cat3 = await call('GET', '/api/admin/feature-models', undefined, admin.cookie)
-  assert(cat3.json.assignments.calibration == null, 'cleared assignment falls back to global default')
+  assert(
+    cat3.json.assignments.calibration?.model_id == null,
+    'cleared assignment falls back to global default',
+  )
 
   // Feature routing endpoints are admin-only.
   const asUser = await call('GET', '/api/admin/feature-models', undefined, u1.cookie)
