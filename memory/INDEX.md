@@ -154,3 +154,8 @@ One entry per completed milestone. Read this before working on the repo.
   P0/P1/P2): commit in-flight work → verify-scripts→CI suite → server split → shared API types → web
   router/query/error surface → design system → plain-language UX → dopamine loop → Admin v2 → hardening.
   CLAUDE.md/ROADMAP now point to it. Next = **RF-1** (commit the dirty tree).
+- [2026-07-09 — RF-1 + RF-2 slice 1](2026-07-09-rf1-rf2-slice1.md) — owner answered all REFACTOR.md
+  §6 decisions (interview-bundle pricing, single-locale EN/FA deploys, adaptive celebration, Admin v2
+  early). RF-1 ✅ (dirty tree committed `7a30765`+`9d1e04d`; CLAUDE.md rule 3a). RF-2 slice 1 ✅:
+  `server/test/integration/verify-scripts.test.mjs` runs all 12 verify scripts in `make check` + CI
+  on an isolated `senior_bro_itest` DB (~24s, sabotage-proven). Next = **RF-2 slice 2 / RF-3**.
