@@ -318,9 +318,14 @@ senior-bro (npm workspace monorepo)
 │   │                     + guardrail frame + code-level claims/evidence + user-model blocks (R23/D2) + render*()
 │   ├── src/features.ts   per-feature model-routing registry (R35/D23): FEATURES[] + FeatureKey
 │   ├── src/skills.ts     loadSeedPacks(): reads skills/*.md — SEED ONLY (runtime packs live in company_packs, D10)
-│   └── src/routes.ts     REST API (per-user; /auth/* in hosted mode); /packs/ensure generate-on-miss (D10);
-│                         /profile/from-cv (résumé→profile, PDF via unpdf, R31) + PUT /profile/:id + DELETE /profiles/:id;
-│                         /me/model read/correct/delete + post-interview distillUserModel() (D2 · Phase 4)
+│   ├── src/routes/       REST API, split per domain (RF-3, 2026-07-09 — replaced the routes.ts monolith):
+│   │                     index.ts (composition + onError) + shared.ts (parseBody/ownProfile/ownInterview) +
+│   │                     health, auth, models, voice, plan, admin, packs, career,
+│   │                     profiles (incl. calibration + /profile/from-cv R31), interviews, me
+│   └── src/services/     cross-cutting business logic (RF-3): entitlement.ts (ResolvedCall/resolveCall/
+│                         enforceEntitlement/requireCall, D11/D21/D23), model-runner.ts (runModel/meterUsage,
+│                         D4/R25), pack-generator.ts (draftPack/generatePack, D10), interview-engine.ts
+│                         (systemFor/distillUserModel, D2)
 ├── web/      React + Vite SPA
 │   ├── src/voice.ts      Web Speech API wrapper (STT + TTS)
 │   ├── src/api.ts        typed client for server API (cookie-authed)

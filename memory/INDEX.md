@@ -154,6 +154,11 @@ One entry per completed milestone. Read this before working on the repo.
   P0/P1/P2): commit in-flight work → verify-scripts→CI suite → server split → shared API types → web
   router/query/error surface → design system → plain-language UX → dopamine loop → Admin v2 → hardening.
   CLAUDE.md/ROADMAP now point to it. Next = **RF-1** (commit the dirty tree).
+- [2026-07-09 — RF-3 slice 1: routes.ts split](2026-07-09-rf3-slice1-routes-split.md) —
+  the 1,598-line `routes.ts` deleted: per-domain `server/src/routes/` (index composes; largest 294
+  lines) + `server/src/services/` (entitlement, model-runner, pack-generator, interview-engine).
+  Behavior-preserving; admin pack-regenerate de-duped via `draftPack()`. `make check` (incl. RF-2
+  integration suite) + `make e2e` green. Next = **RF-3 slice 2** (split db.ts + prompts.ts).
 - [2026-07-09 — RF-1 + RF-2 slice 1](2026-07-09-rf1-rf2-slice1.md) — owner answered all REFACTOR.md
   §6 decisions (interview-bundle pricing, single-locale EN/FA deploys, adaptive celebration, Admin v2
   early). RF-1 ✅ (dirty tree committed `7a30765`+`9d1e04d`; CLAUDE.md rule 3a). RF-2 slice 1 ✅:
