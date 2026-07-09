@@ -323,16 +323,20 @@ in the CI integration suite; `verify-ph35.mjs` updated to the new assignment sha
       a clear 503 before any model call (`PUT /api/admin/feature-models/:key`
       gains `{disabled}`); BYOK/local unaffected.
 
-**Slice 2 — web console** (rides RF-5 routing + RF-6 components):
-- [ ] Split `Admin.tsx` into routed sub-pages: `/admin` (nav cards) →
-      `/admin/models`, `/admin/features`, `/admin/users`, `/admin/invites`,
-      `/admin/prompts`, `/admin/packs`, `/admin/usage` (audit), `/admin/audit`.
-- [ ] Prompts: side-by-side **diff/compare** between versions (small dependency-
-      free line-diff), one-tap activate/rollback (R26b).
-- [ ] Usage: per-event audit table with user filter + CSV export; per-user
-      drill-down from the users list.
-- [ ] Users: suspend/unsuspend button, quota edit (proper field, not
-      window.prompt), plan shown; audit-log page.
+**Slice 2 — web console** ✅ 2026-07-09 (rides RF-5 routing + RF-6 components;
+the 830-line `Admin.tsx` is deleted):
+- [x] Split into routed sub-pages under `web/src/pages/admin/`: `/admin`
+      (Overview nav cards) → `/admin/models`, `/admin/features` (routing + kill
+      switches), `/admin/prompts`, `/admin/packs`, `/admin/users`,
+      `/admin/invites`, `/admin/usage`, `/admin/audit` — shared `AdminShell`
+      tab nav (real links, deep-linkable), all behind an `AdminGuard`.
+- [x] Prompts: version **diff/compare** (dependency-free LCS line diff in
+      `web/src/diff.ts`, ±color-coded) + one-tap activate/rollback (R26b).
+- [x] Usage: per-event audit table, `?user=` filter (linked from Users),
+      totals row, CSV export.
+- [x] Users: suspend/unsuspend (confirm dialog), inline quota editor (replaced
+      `window.prompt`), plan + suspended badges; Admin-log page renders the
+      `admin_events` trail.
 - **Gate:** owner performs: rotate a key, reroute a feature, kill a feature,
   diff+rollback a prompt, audit a user's spend, suspend a user — all without
   touching code.

@@ -505,6 +505,64 @@ button.navcard:hover {
   display: flex;
 }
 
+/* ── RF-9: admin console tabs + prompt diff view ── */
+.admin-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0 14px;
+}
+.admin-tab {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 4px 12px;
+}
+.admin-tab:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.admin-tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+.diff-view {
+  font-family: monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--panel-2);
+}
+.diff-line {
+  white-space: pre-wrap;
+  padding: 0 8px;
+}
+.diff-line .diff-sign {
+  display: inline-block;
+  width: 14px;
+  color: var(--muted);
+  user-select: none;
+}
+.diff-line.add {
+  background: rgba(62, 207, 142, 0.12);
+  color: #9fe8c7;
+}
+.diff-line.del {
+  background: rgba(240, 106, 106, 0.12);
+  color: #ffb3b3;
+}
+/* links styled as ghost buttons (admin tables) */
+a.ghost {
+  text-decoration: none;
+}
+
 /* ── RF-5: toasts ── */
 .toast-stack {
   position: fixed;

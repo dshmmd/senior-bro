@@ -23,7 +23,15 @@ import { Skeleton } from './components/Skeleton'
 import { Icon } from './components/Icon'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
-import { Admin } from './pages/Admin'
+import { AdminOverview } from './pages/admin/Overview'
+import { AdminModels } from './pages/admin/Models'
+import { AdminFeatures } from './pages/admin/Features'
+import { AdminPrompts } from './pages/admin/Prompts'
+import { AdminPacks } from './pages/admin/Packs'
+import { AdminUsers } from './pages/admin/Users'
+import { AdminInvites } from './pages/admin/Invites'
+import { AdminUsage } from './pages/admin/Usage'
+import { AdminAudit } from './pages/admin/Audit'
 import { Setup } from './pages/Setup'
 import { ProfileSetup } from './pages/ProfileSetup'
 import { Calibration } from './pages/Calibration'
@@ -69,7 +77,15 @@ export function App() {
                 <Route path="/career" element={<Gate need="level" children={<CareerRoute />} />} />
                 <Route path="/study" element={<Gate need="level" children={<StudyRoute />} />} />
                 <Route path="/memory" element={<Gate need="level" children={<MemoryRoute />} />} />
-                <Route path="/admin" element={<Gate need="none" children={<AdminRoute />} />} />
+                <Route path="/admin" element={<AdminGuard children={<AdminOverview />} />} />
+                <Route path="/admin/models" element={<AdminGuard children={<AdminModels />} />} />
+                <Route path="/admin/features" element={<AdminGuard children={<AdminFeatures />} />} />
+                <Route path="/admin/prompts" element={<AdminGuard children={<AdminPrompts />} />} />
+                <Route path="/admin/packs" element={<AdminGuard children={<AdminPacks />} />} />
+                <Route path="/admin/users" element={<AdminGuard children={<AdminUsers />} />} />
+                <Route path="/admin/invites" element={<AdminGuard children={<AdminInvites />} />} />
+                <Route path="/admin/usage" element={<AdminGuard children={<AdminUsage />} />} />
+                <Route path="/admin/audit" element={<AdminGuard children={<AdminAudit />} />} />
                 <Route path="/report/:id" element={<Gate need="level" children={<ReportRoute />} />} />
                 <Route
                   path="/interview/new"
@@ -392,13 +408,13 @@ function MemoryRoute() {
   return <Memory onBack={() => void navigate('/dashboard')} />
 }
 
-function AdminRoute() {
-  const navigate = useNavigate()
+/** Admin-only gate (RF-9): hosted non-admins bounce to the dashboard; local owner is admin. */
+function AdminGuard({ children }: { children: ReactNode }) {
   const health = useHealth()
   if (health.isPending) return <Skeleton lines={3} />
   if (health.data?.user?.role !== 'admin' && health.data?.mode === 'hosted')
     return <Navigate to="/dashboard" replace />
-  return <Admin onBack={() => void navigate('/dashboard')} />
+  return <Gate need="none">{children}</Gate>
 }
 
 function ReportRoute() {
