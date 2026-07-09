@@ -346,8 +346,10 @@ The core product surface; rides RF-6.
 - [ ] `Interview.tsx` (364 lines) split: `ChatTranscript`, `Composer`,
       `VoiceBar`, `SteeringChips`, `PhaseIndicator`; voice state machine
       (`voice.ts` Listener/Recorder/Speaker) gets its own hook + unit tests.
-- [ ] Reconnect/robustness UX: SSE drop mid-answer → visible "reconnecting",
-      resume without losing the draft; guard against double-send.
+- [x] **(2026-07-09, partial)** Send-failure recovery: a dropped connection rolls
+      back the optimistic message and restores the draft ("hit Send to retry");
+      double-send already guarded by the busy flag. Visible reconnect state for
+      the SSE stream itself still TODO.
 - [ ] Mobile pass: composer/mic ergonomics at 380px, TTS autoplay quirks on iOS
       documented or handled.
 - **Gate:** e2e covering voice-mode mock flow + a network-drop scenario.

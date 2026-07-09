@@ -170,6 +170,10 @@ One entry per completed milestone. Read this before working on the repo.
   feature kill switch), per-event usage audit, `verify-admin-v2.mjs`; Admin.tsx → 9 routed pages with
   prompt diff/compare, CSV export, suspend, inline quota. Feature assignments now `{model_id, disabled}`.
   Next = **RF-7** (plain language + onboarding + landing), then RF-8, RF-10.
+- [2026-07-09 — RF-7 + RF-8: plain language + dopamine loop](2026-07-09-rf7-rf8-plain-language-dopamine.md) —
+  bundles-of-interviews pricing (`interview_estimate_tokens`, `web/src/strings.ts` i18n seam), jargon
+  sweep, landing de-BYOKed; adaptive Celebration/CountUp, ReportReveal w/ delta + medal ceremony,
+  streak badge; send-failure draft recovery. Remaining: RF-6 s2, RF-8 polish, RF-10 rest, P2 (RF-11+).
 - [2026-07-09 — RF-1 + RF-2 slice 1](2026-07-09-rf1-rf2-slice1.md) — owner answered all REFACTOR.md
   §6 decisions (interview-bundle pricing, single-locale EN/FA deploys, adaptive celebration, Admin v2
   early). RF-1 ✅ (dirty tree committed `7a30765`+`9d1e04d`; CLAUDE.md rule 3a). RF-2 slice 1 ✅:

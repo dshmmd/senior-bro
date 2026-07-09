@@ -243,7 +243,13 @@ export function Interview({
       if (mode === 'voice') speaker.current.flush()
       if (r.done) setDone(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      // RF-10: a dropped connection must not eat the answer — roll the optimistic user
+      // message back and restore the draft so one more click of Send retries it.
+      setMessages((m) => (m[m.length - 1]?.role === 'user' ? m.slice(0, -1) : m))
+      setDraft(text.trim())
+      setError(
+        `${err instanceof Error ? err.message : String(err)} — your answer is back in the box, hit Send to retry.`,
+      )
     } finally {
       setPartial(null)
       setThinking(false)
