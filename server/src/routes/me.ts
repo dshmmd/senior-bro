@@ -1,5 +1,6 @@
 // Active-profile-scoped reads/actions: weaknesses, gamification progress (D7/R34),
 // and the personalization "what we know about you" model (D2/D6).
+import type { ProgressResponse } from '@senior-bro/shared'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import { requireUser } from '../auth.js'
@@ -47,7 +48,7 @@ export function registerMeRoutes(api: Hono): void {
       if (forDomain.every((i) => i.report === null)) return [] // no evidence yet → stays hidden
       return [{ domain: d.key, label: d.label, progress: computeProgress(profile, forDomain, weaknesses) }]
     })
-    return c.json({ domains })
+    return c.json({ domains } satisfies ProgressResponse)
   })
 
   // ── personalization: "what we know about you" (D2 / D6 / Phase 4) ────

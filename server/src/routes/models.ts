@@ -1,4 +1,5 @@
 // User-facing model catalog, selection + usage/billing readout.
+import type { ModelOption, UsageInfo } from '@senior-bro/shared'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import { requireUser } from '../auth.js'
@@ -14,7 +15,10 @@ export function registerModelRoutes(api: Hono): void {
   // Curated models the user may pick from (admin-enabled only; never exposes keys).
   api.get('/models', async (c) => {
     const user = await requireUser(c)
-    return c.json({ models: await db.listModels(true), selected_model_id: user.model_id })
+    return c.json({ models: await db.listModels(true), selected_model_id: user.model_id } satisfies {
+      models: ModelOption[]
+      selected_model_id: number | null
+    })
   })
 
   // Pick an admin-curated model (host key + metered). Hosted mode only.
@@ -48,6 +52,6 @@ export function registerModelRoutes(api: Hono): void {
       first_impressions_used: impressionsUsed,
       first_impressions_limit: FREE_IMPRESSION_LIMIT,
       capability_tier: tier,
-    })
+    } satisfies UsageInfo)
   })
 }

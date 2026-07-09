@@ -1,5 +1,6 @@
 // Interview lifecycle: start (streamed opener), turns, finish + evaluation,
 // history, resume/discard (D14). Domain-routed (R33) and tier-budgeted (D3).
+import type { InterviewSummary } from '@senior-bro/shared'
 import type { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
@@ -194,7 +195,7 @@ export function registerInterviewRoutes(api: Hono): void {
         turns: i.transcript.length,
         overall_score: i.report?.overall_score ?? null,
         level_estimate: i.report?.level_estimate ?? null,
-      })),
+      })) satisfies InterviewSummary[],
     )
   })
 

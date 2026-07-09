@@ -1,0 +1,22 @@
+{
+  "name": "@senior-bro/shared",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "API contract types shared by server (satisfies-checked responses) and web (typed client). RF-4.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

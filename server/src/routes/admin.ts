@@ -1,5 +1,6 @@
 // Admin console routes (R13/R17/R14/R35): model & key catalog, per-feature routing,
 // users/quotas, invite codes, versioned prompts, company-pack review queue.
+import type { PromptCatalogEntry } from '@senior-bro/shared'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import { requireAdmin } from '../admin.js'
@@ -224,7 +225,7 @@ export function registerAdminRoutes(api: Hono): void {
         }
       }),
     )
-    return c.json(rows)
+    return c.json(rows satisfies PromptCatalogEntry[])
   })
 
   /** All saved versions of one prompt key (newest first), for the editor + history. */

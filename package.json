@@ -6,6 +6,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
+    "shared",
     "server",
     "web"
   ],
@@ -16,8 +17,8 @@
     "dev": "npm-run-all --parallel dev:server dev:web",
     "dev:server": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
-    "build": "npm run build -w web && npm run build -w server",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "build": "npm run build -w shared && npm run build -w web && npm run build -w server",
+    "typecheck": "npm run build -w shared && npm run typecheck -w server && npm run typecheck -w web",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

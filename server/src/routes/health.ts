@@ -1,4 +1,5 @@
 // Health/readiness + per-user provider config (BYOK/CLI) routes.
+import type { Health } from '@senior-bro/shared'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import { DEFAULT_MODELS, isCliProvider, type AppConfig } from '../config.js'
@@ -68,7 +69,7 @@ export function registerHealthRoutes(api: Hono): void {
       first_impressions_used: impressionsUsed,
       first_impressions_limit: FREE_IMPRESSION_LIMIT,
       interview_ready: interviewReady,
-    })
+    } satisfies Health)
   })
 
   api.get('/config', async (c) => {

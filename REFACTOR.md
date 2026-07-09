@@ -205,13 +205,19 @@ Fixes W8. Pure move-and-split; RF-2's suite proves nothing broke.
 
 #### RF-4 · One source of truth for API types — M
 Fixes W10.
-- [ ] New workspace `shared/` with zod schemas for request/response shapes; server
-      validates with them, web infers TS types from them (`z.infer`). Start with
-      the highest-drift surfaces: health, usage, profile, interview, progress,
-      admin models/prompts.
-- [ ] Shrink `web/src/api.ts` to a thin typed fetch wrapper importing shared types.
-- **Gate:** typecheck fails if either side changes shape unilaterally (prove it
-  with a deliberate mismatch).
+- [x] **(2026-07-09)** New workspace `shared/` (`@senior-bro/shared`, built d.ts,
+      `prepare` script) holding every API contract type. Implementation note: went
+      with **plain TS interfaces + server-side `satisfies` pins** rather than zod
+      response schemas — the server already zod-validates *requests*; responses
+      need compile-time contract enforcement, not runtime parsing. Server pins the
+      high-drift surfaces (`Health`, `UsageInfo`, `/models`, `InterviewSummary[]`,
+      `ProgressResponse`, `PromptCatalogEntry[]`) with `satisfies`. Found + fixed a
+      real drift while porting: web's `CompanyPack.source` was missing `'tier'`.
+- [x] `web/src/api.ts` shrunk to the fetch/SSE wrapper + `export type * from
+      '@senior-bro/shared'` — pages keep importing from `./api` unchanged.
+- **Gate:** typecheck fails if either side changes shape unilaterally — ✔ proven
+  2026-07-09 with a deliberate bogus field in `Health` (server `tsc` failed);
+  `make check` + `make e2e` green. Root `typecheck`/`build` build `shared` first.
 
 #### RF-5 · Web foundations: router, data layer, error surface — L
 Fixes W1, W3, W4. This is the enabler for every P1 UX epic.
