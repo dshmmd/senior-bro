@@ -159,6 +159,12 @@ One entry per completed milestone. Read this before working on the repo.
   lines) + `server/src/services/` (entitlement, model-runner, pack-generator, interview-engine).
   Behavior-preserving; admin pack-regenerate de-duped via `draftPack()`. `make check` (incl. RF-2
   integration suite) + `make e2e` green. Next = **RF-3 slice 2** (split db.ts + prompts.ts).
+- [2026-07-09 — RF-4 + RF-5: refactor P0 COMPLETE](2026-07-09-rf4-rf5-p0-complete.md) —
+  RF-3 slice 2 (db.ts + prompts.ts split behind barrels), RF-4 (`@senior-bro/shared` contract
+  workspace, server `satisfies` pins, drift-proof typecheck), RF-5 (React Router URLs everywhere +
+  TanStack Query + toasts/confirm/skeletons, `e2e/urls.spec.ts`, Playwright workers:1). Owner
+  decisions: interview-bundle pricing, single-locale deploys (EN/FA), adaptive celebrations,
+  Admin v2 right after design system. Next = **RF-6** then **RF-9**.
 - [2026-07-09 — RF-1 + RF-2 slice 1](2026-07-09-rf1-rf2-slice1.md) — owner answered all REFACTOR.md
   §6 decisions (interview-bundle pricing, single-locale EN/FA deploys, adaptive celebration, Admin v2
   early). RF-1 ✅ (dirty tree committed `7a30765`+`9d1e04d`; CLAUDE.md rule 3a). RF-2 slice 1 ✅:
