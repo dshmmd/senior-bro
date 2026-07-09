@@ -57,7 +57,20 @@ export function App() {
     hosted: boolean
     email: string | null
     role: 'user' | 'admin' | null
-  }>({ hosted: false, email: null, role: null })
+    // Interview readiness + free-tier budget (drives the interview-start gate + Dashboard status).
+    interviewReady: boolean
+    creditLeft: number | null
+    firstImpressionsUsed: number
+    firstImpressionsLimit: number
+  }>({
+    hosted: false,
+    email: null,
+    role: null,
+    interviewReady: true,
+    creditLeft: null,
+    firstImpressionsUsed: 0,
+    firstImpressionsLimit: 3,
+  })
 
   const refresh = useCallback(async () => {
     const health = await api.health().catch(() => null)
@@ -70,14 +83,20 @@ export function App() {
       hosted,
       email: health.user?.email ?? null,
       role: health.user?.role ?? null,
+      interviewReady: health.interview_ready,
+      creditLeft: health.credit_left,
+      firstImpressionsUsed: health.first_impressions_used,
+      firstImpressionsLimit: health.first_impressions_limit,
     })
     if (hosted && !health.authed) {
       setView({ name: 'login' })
       return
     }
-    // Local mode keeps the original gate: a provider must be configured up front.
-    // Hosted mode defers it — the free level-check needs no key, then a plan is chosen.
-    if (!hosted && !health.configured) {
+    // Local mode gate: something must be configured up front — a subscription CLI OR a selected
+    // provided model (the latter was previously ignored, which bounced model-pickers back here).
+    // Hosted mode defers all of this — the free level-check needs no setup, and the interviewer
+    // model is chosen at interview-start, not during onboarding.
+    if (!hosted && !health.configured && !health.has_model) {
       setView({ name: 'setup' })
       return
     }
@@ -85,9 +104,6 @@ export function App() {
     setProfile(p)
     if (!p) setView({ name: 'profile' })
     else if (!p.level) setView({ name: 'calibration' })
-    // After the free level-check, a hosted user with no usable setup (no own key and no
-    // selected host model) must choose a plan before interviews unlock (D11).
-    else if (hosted && !health.configured && !health.has_model) setView({ name: 'plan' })
     else setView({ name: 'dashboard' })
   }, [])
 
@@ -118,6 +134,18 @@ export function App() {
     await api.logout().catch(() => undefined)
     setProfile(null)
     setView({ name: 'login' })
+  }
+
+  // Interview-start gate: interviews are metered, so a hosted user who isn't ready (no chosen model
+  // or no balance) is routed to the plan/model chooser first instead of hitting a mid-flow paywall.
+  const startInterview = (
+    mode: 'voice' | 'text',
+    kind: 'full' | 'coaching',
+    domain: InterviewDomain,
+    weaknessId?: number,
+  ) => {
+    if (account.hosted && !account.interviewReady) setView({ name: 'plan' })
+    else setView({ name: 'interview', mode, kind, domain, weaknessId })
   }
 
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
@@ -212,16 +240,17 @@ export function App() {
         {view.name === 'calibration' && profile && (
           <Calibration profile={profile} onDone={() => void refresh()} />
         )}
-        {view.name === 'plan' && (
-          <Plan onDone={() => void refresh()} onChooseByok={() => setView({ name: 'setup' })} />
-        )}
+        {view.name === 'plan' && <Plan onDone={() => void refresh()} />}
         {view.name === 'dashboard' && profile && (
           <Dashboard
             profile={profile}
             email={account.email}
-            onStartInterview={(mode, kind, domain, weaknessId) =>
-              setView({ name: 'interview', mode, kind, domain, weaknessId })
-            }
+            hosted={account.hosted}
+            interviewReady={account.interviewReady}
+            creditLeft={account.creditLeft}
+            firstImpressionsUsed={account.firstImpressionsUsed}
+            firstImpressionsLimit={account.firstImpressionsLimit}
+            onStartInterview={startInterview}
             onResumeInterview={(id, mode, kind) =>
               setView({ name: 'interview', mode, kind, domain: 'technical', resumeId: id })
             }
@@ -245,9 +274,7 @@ export function App() {
           <StudyPlan
             profile={profile}
             onBack={() => setView({ name: 'dashboard' })}
-            onDrill={(weaknessId) =>
-              setView({ name: 'interview', mode: 'text', kind: 'coaching', domain: 'technical', weaknessId })
-            }
+            onDrill={(weaknessId) => startInterview('text', 'coaching', 'technical', weaknessId)}
           />
         )}
         {view.name === 'memory' && <Memory onBack={() => setView({ name: 'dashboard' })} />}

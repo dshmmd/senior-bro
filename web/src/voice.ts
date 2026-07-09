@@ -68,6 +68,48 @@ export class Listener {
   }
 }
 
+/**
+ * Push-to-talk mic capture for server-side transcription (R30): record to a Blob, upload it,
+ * get a transcript back. Unlike `Listener` there's no live interim text — the caller shows a
+ * brief "transcribing…" state between stop() and the transcript arriving.
+ */
+export const recordingSupported = (): boolean =>
+  'mediaDevices' in navigator && typeof MediaRecorder !== 'undefined'
+
+export class Recorder {
+  private media: MediaRecorder | null = null
+  private stream: MediaStream | null = null
+  private chunks: Blob[] = []
+  active = false
+
+  async start(): Promise<void> {
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    this.chunks = []
+    this.media = new MediaRecorder(this.stream)
+    this.media.ondataavailable = (e) => {
+      if (e.data.size > 0) this.chunks.push(e.data)
+    }
+    this.active = true
+    this.media.start()
+  }
+
+  /** Stop recording and resolve with the captured audio, or null if nothing was recorded. */
+  stop(): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      this.active = false
+      const media = this.media
+      if (!media) return resolve(null)
+      media.onstop = () => {
+        this.stream?.getTracks().forEach((t) => t.stop())
+        this.stream = null
+        this.media = null
+        resolve(this.chunks.length ? new Blob(this.chunks, { type: media.mimeType || 'audio/webm' }) : null)
+      }
+      media.stop()
+    })
+  }
+}
+
 function makeUtterance(text: string): SpeechSynthesisUtterance {
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.rate = 1.05

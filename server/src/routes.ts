@@ -12,6 +12,7 @@ import * as db from './db.js'
 import {
   chat,
   extractJson,
+  transcribe,
   validateKey,
   type ChatMessage,
   type ChatOptions,
@@ -157,6 +158,9 @@ async function enforceEntitlement(
   profileId?: number,
 ): Promise<void> {
   if (!isHosted) return
+  // Admins are staff (the deploy owner + SENIORBRO_ADMIN_EMAILS): they run every feature
+  // un-metered on the platform's models, never paywalled by the free-impression or credit gates.
+  if (user.role === 'admin') return
   if (call.modelId === null) return
   if (call.freeIntro) {
     // The free tier covers onboarding a position, never a full interview.
@@ -203,6 +207,25 @@ async function callForInterview(user: db.User, interview: db.InterviewRow): Prom
   return call
 }
 
+/** Record token usage/cost for a resolved call (D4/R25) — shared by chat calls and transcription. */
+async function meterUsage(
+  user: db.User,
+  call: ResolvedCall,
+  usage: { inputTokens: number; outputTokens: number },
+): Promise<void> {
+  const costUsd =
+    (usage.inputTokens / 1_000_000) * call.priceIn + (usage.outputTokens / 1_000_000) * call.priceOut
+  await db.recordUsage({
+    userId: user.id,
+    modelId: call.modelId,
+    provider: call.cfg.provider,
+    model: call.cfg.model,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    costUsd,
+  })
+}
+
 /** Run a model call, record its token usage/cost, and return the text. */
 async function runModel(
   user: db.User,
@@ -227,18 +250,22 @@ async function runModelFull(
   options?: ChatOptions,
 ): Promise<{ text: string; searched: boolean }> {
   const { text, usage, searched } = await chat(call.cfg, system, messages, maxTokens, onDelta, options)
-  const costUsd =
-    (usage.inputTokens / 1_000_000) * call.priceIn + (usage.outputTokens / 1_000_000) * call.priceOut
-  await db.recordUsage({
-    userId: user.id,
-    modelId: call.modelId,
-    provider: call.cfg.provider,
-    model: call.cfg.model,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    costUsd,
-  })
+  await meterUsage(user, call, usage)
   return { text, searched: searched ?? false }
+}
+
+/**
+ * Resolve a model call for voice transcription (R30). Unlike `resolveCall`, this NEVER falls
+ * back to the global default chat model — a chat model can't serve `/audio/transcriptions`, so
+ * that fallback would just fail confusingly. Returns null when no admin has explicitly assigned
+ * `voice.transcribe`, so the caller can offer the browser-STT fallback instead of erroring.
+ */
+async function resolveTranscribeCall(): Promise<ResolvedCall | null> {
+  const routedId = await db.assignedFeatureModel('voice.transcribe')
+  if (!routedId) return null
+  const resolved = await db.modelConfig(routedId)
+  if (!resolved?.option.enabled) return null
+  return hostCall(resolved, false)
 }
 
 /** Throw 404 unless `profileId` belongs to `userId` (cross-user isolation guard). */
@@ -426,6 +453,30 @@ function promptKeyOf(c: Context): (typeof promptKeys)[number] {
 api.get('/health', async (c) => {
   const user = await currentUser(c)
   const configured = user ? (await db.getUserConfig(user.id)) !== null : false
+  const hasModel = user ? user.model_id !== null : false
+  // Can this user actually start a (paid) interview right now? This is the readiness signal the
+  // client routes on — crucially it counts a *selected host model*, not just the user's own key.
+  // (The prior gate only looked at `configured`, so picking a curated model looked like "nothing
+  // configured" and the app bounced the user back to setup.)
+  let creditLeft: number | null = null
+  let impressionsUsed = 0
+  let interviewReady = !isHosted // local mode is single-owner & unrestricted
+  if (user && isHosted) {
+    const tokensUsed = await db.tokensUsed(user.id)
+    creditLeft = user.token_quota !== null ? Math.max(0, user.token_quota - tokensUsed) : null
+    impressionsUsed = await db.firstImpressionCount(user.id)
+    if (user.role === 'admin') {
+      // Staff run un-metered on the platform models — ready as long as one exists to run on.
+      interviewReady = hasModel || configured || (await db.defaultModel()) !== null
+    } else {
+      interviewReady =
+        user.plan === 'byok' || user.plan === 'local'
+          ? configured || hasModel // own key / local CLI: never metered, always ready
+          : hasModel && (creditLeft ?? 0) > 0 // host plan: needs a chosen model + remaining credit
+    }
+  } else if (user) {
+    interviewReady = configured || hasModel
+  }
   return c.json({
     ok: true,
     mode: MODE,
@@ -433,7 +484,11 @@ api.get('/health', async (c) => {
     user: user ? { email: user.email, role: user.role } : null,
     plan: user?.plan ?? null,
     configured,
-    has_model: user ? user.model_id !== null : false,
+    has_model: hasModel,
+    credit_left: creditLeft,
+    first_impressions_used: impressionsUsed,
+    first_impressions_limit: FREE_IMPRESSION_LIMIT,
+    interview_ready: interviewReady,
   })
 })
 
@@ -556,6 +611,37 @@ api.get('/usage', async (c) => {
     first_impressions_limit: FREE_IMPRESSION_LIMIT,
     capability_tier: tier,
   })
+})
+
+// ── voice transcription (R30) ─────────────────────────────────────────
+
+// Whether server-side transcription is configured — lets the client silently fall back to
+// the browser's built-in dictation instead of erroring on every recording.
+api.get('/voice/available', async (c) => {
+  await requireUser(c)
+  return c.json({ available: (await resolveTranscribeCall()) !== null })
+})
+
+// Transcribe a recorded answer. Entitlement-gated like an interview turn (paid host credit /
+// BYOK / local — never covered by the free-intro onboarding budget, since it's used mid-interview).
+api.post('/voice/transcribe', async (c) => {
+  const user = await requireUser(c)
+  const call = await resolveTranscribeCall()
+  if (!call) throw new HttpError(409, 'server-side transcription is not configured')
+  await enforceEntitlement(user, call, 'interview')
+  const form = await c.req.parseBody()
+  const file = form.file
+  if (!file || typeof file === 'string') throw new HttpError(400, 'missing audio file')
+  const audio = new Uint8Array(await file.arrayBuffer())
+  if (audio.length === 0) throw new HttpError(400, 'empty audio')
+  const { text, usage } = await transcribe(
+    call.cfg,
+    audio,
+    file.type || 'audio/webm',
+    file.name || 'audio.webm',
+  )
+  await meterUsage(user, call, usage)
+  return c.json({ text })
 })
 
 // ── plans, mocked payment & invite redemption (D11) ──────────────────

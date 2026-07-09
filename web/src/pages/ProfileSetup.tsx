@@ -124,6 +124,13 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
               {extracting ? 'Reading your résumé…' : 'Extract from résumé →'}
             </button>
           </div>
+          {/* Show extraction failures (out of free impressions, no plan, model error) right here,
+              at the button the user just pressed — not only in the form card below. */}
+          {error && (
+            <div className="error" style={{ marginTop: 10 }}>
+              {error}
+            </div>
+          )}
         </div>
       )}
 

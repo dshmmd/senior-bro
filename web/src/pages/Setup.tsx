@@ -10,6 +10,9 @@ interface ProviderOption {
   models: string[]
 }
 
+// Bring-your-own-API-key is retired — hosted users run on provided models (metered against their
+// balance); local users use a subscription CLI they already pay for. Only the CLI options remain,
+// and they're local-only (a hosted deploy can't proxy a customer's personal CLI login — D8).
 const PROVIDERS: ProviderOption[] = [
   {
     id: 'claude-cli',
@@ -27,30 +30,14 @@ const PROVIDERS: ProviderOption[] = [
     defaultModel: '',
     models: ['', 'gpt-5', 'gpt-5-codex'],
   },
-  {
-    id: 'anthropic',
-    name: 'Claude API key',
-    hint: 'Pay-as-you-go. Get a key at console.anthropic.com → API Keys.',
-    kind: 'key',
-    defaultModel: 'claude-opus-4-8',
-    models: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI API key',
-    hint: 'Pay-as-you-go. Get a key at platform.openai.com → API Keys.',
-    kind: 'key',
-    defaultModel: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini'],
-  },
 ]
 
 export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?: boolean }) {
-  // Hosted users can't proxy a personal CLI subscription (D8) — offer only API-key options.
-  const providerOptions = hosted ? PROVIDERS.filter((p) => p.kind !== 'cli') : PROVIDERS
-  const [provider, setProvider] = useState<ProviderOption>(providerOptions[0]!)
-  const [model, setModel] = useState(providerOptions[0]!.defaultModel)
-  const [apiKey, setApiKey] = useState('')
+  // Hosted users can't proxy a personal CLI subscription (D8), and BYOK is retired — so hosted has
+  // no self-provider options at all; it only picks a provided (metered) model. Local keeps its CLIs.
+  const providerOptions = hosted ? [] : PROVIDERS
+  const [provider, setProvider] = useState<ProviderOption | null>(providerOptions[0] ?? null)
+  const [model, setModel] = useState(providerOptions[0]?.defaultModel ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [curated, setCurated] = useState<ModelOption[]>([])
@@ -74,13 +61,12 @@ export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?:
     }
   }
 
-  const isCli = provider.kind === 'cli'
-
   const save = async () => {
+    if (!provider) return
     setBusy(true)
     setError('')
     try {
-      await api.saveConfig(provider.id, isCli ? '' : apiKey, model)
+      await api.saveConfig(provider.id, '', model)
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -89,20 +75,18 @@ export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?:
     }
   }
 
-  const canSave = isCli || apiKey.trim().length >= 8
-
   return (
     <>
-      <h1>Welcome 👋</h1>
+      <h1>Choose your interviewer</h1>
       <p className="sub">
         {hosted
-          ? 'Pick a ready-to-go model provided for you, or bring your own API key. Your usage is metered against your account.'
-          : 'Senior Bro runs entirely on your machine. Use a subscription you already pay for — no API credits required — or bring your own API key. Nothing leaves your machine except the calls to your chosen AI.'}
+          ? 'Pick the model that runs your interviews. Your first 3 “first impressions” (résumé, company research, level check) are free — interviews are metered against your balance. You can change this anytime.'
+          : 'Senior Bro runs entirely on your machine. Use a subscription you already pay for — no API credits required. Nothing leaves your machine except the calls to your chosen AI.'}
       </p>
 
       {curated.length > 0 && (
         <>
-          <h2>Use a provided model (no key needed)</h2>
+          <h2>Provided models</h2>
           <div className="provider-grid">
             {curated.map((m) => (
               <div key={m.id} className="card clickable" onClick={() => void pickCurated(m)}>
@@ -112,42 +96,47 @@ export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?:
                 </div>
                 <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
                   {m.provider} · {m.model}
+                  {m.capability_tier ? ` · ${m.capability_tier}` : ''}
                   {m.price_in > 0 || m.price_out > 0 ? ` — $${m.price_in}/$${m.price_out} per 1M tokens` : ''}
                 </div>
               </div>
             ))}
           </div>
-          <p className="sub" style={{ marginTop: 8 }}>
-            …or bring your own key below.
-          </p>
         </>
       )}
 
-      <h2>{curated.length > 0 ? 'Bring your own key' : '1. How do you want to power it?'}</h2>
-      <div className="provider-grid">
-        {providerOptions.map((p) => (
-          <div
-            key={p.id}
-            className="card clickable"
-            style={{ borderColor: provider.id === p.id ? 'var(--accent)' : undefined }}
-            onClick={() => {
-              setProvider(p)
-              setModel(p.defaultModel)
-              setError('')
-            }}
-          >
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <b>{p.name}</b>
-              {p.kind === 'cli' && <span className="badge resolved">no key</span>}
-            </div>
-            <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>{p.hint}</div>
-          </div>
-        ))}
-      </div>
+      {curated.length === 0 && hosted && (
+        <div className="card">No models are available yet — ask the admin to add one.</div>
+      )}
 
-      {isCli ? (
+      {/* Local mode only: connect a subscription CLI (no API key, no balance). */}
+      {provider && (
         <>
-          <h2>2. Make sure you're signed in</h2>
+          <h2>
+            {curated.length > 0 ? 'Or use a local subscription (no key)' : 'How do you want to power it?'}
+          </h2>
+          <div className="provider-grid">
+            {providerOptions.map((p) => (
+              <div
+                key={p.id}
+                className="card clickable"
+                style={{ borderColor: provider.id === p.id ? 'var(--accent)' : undefined }}
+                onClick={() => {
+                  setProvider(p)
+                  setModel(p.defaultModel)
+                  setError('')
+                }}
+              >
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <b>{p.name}</b>
+                  <span className="badge resolved">no key</span>
+                </div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>{p.hint}</div>
+              </div>
+            ))}
+          </div>
+
+          <h2>Make sure you're signed in</h2>
           <div className="card">
             <p style={{ marginTop: 0 }}>
               In a terminal, run <code>{provider.id === 'claude-cli' ? 'claude' : 'codex'}</code> once and
@@ -173,36 +162,9 @@ export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?:
             </p>
           </div>
         </>
-      ) : (
-        <>
-          <h2>2. Paste your API key</h2>
-          <div className="card">
-            <label>
-              {hosted
-                ? 'API key (encrypted at rest, tied to your account)'
-                : 'API key (stored only in ~/.senior-bro/config.json on your machine)'}
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              placeholder={provider.id === 'anthropic' ? 'sk-ant-…' : 'sk-…'}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-            <label>Model</label>
-            <select value={model} onChange={(e) => setModel(e.target.value)}>
-              {provider.models.map((m) => (
-                <option key={m}>{m}</option>
-              ))}
-            </select>
-            {error && <div className="error">{error}</div>}
-            <div className="mt">
-              <button disabled={busy || !canSave} onClick={() => void save()}>
-                {busy ? 'Validating key…' : 'Save & continue →'}
-              </button>
-            </div>
-          </div>
-        </>
       )}
+
+      {error && !provider && <div className="error">{error}</div>}
     </>
   )
 }

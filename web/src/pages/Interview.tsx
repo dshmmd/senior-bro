@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type InterviewDomain, type InterviewReport, type Profile } from '../api'
-import { Listener, Speaker, stopSpeaking } from '../voice'
+import { Listener, Recorder, Speaker, recordingSupported, stopSpeaking } from '../voice'
 import { ReportCard } from './Report'
 
 interface Msg {
@@ -72,10 +72,24 @@ export function Interview({
   const [error, setError] = useState('')
   const [listening, setListening] = useState(false)
   const [interim, setInterim] = useState('')
+  const [transcribing, setTranscribing] = useState(false)
+  // R30: server-side transcription (GPT-4o-Transcribe et al.) upgrades the mic from live browser
+  // dictation to record-then-upload when an admin has assigned a voice.transcribe model; null
+  // while we haven't checked yet, so the mic stays on the safe browser-STT path meanwhile.
+  const [serverStt, setServerStt] = useState<boolean | null>(null)
   const listener = useRef(new Listener())
+  const recorder = useRef(new Recorder())
   const speaker = useRef(new Speaker())
   const bottom = useRef<HTMLDivElement>(null)
   const started = useRef(false)
+
+  useEffect(() => {
+    if (mode !== 'voice') return
+    api
+      .voiceAvailable()
+      .then((r) => setServerStt(r.available && recordingSupported()))
+      .catch(() => setServerStt(false))
+  }, [mode])
 
   const onDelta = (t: string) => {
     setThinking(false)
@@ -143,16 +157,48 @@ export function Interview({
     }
   }
 
-  const toggleMic = () => {
+  /** D15: never auto-send raw speech-to-text — land it in the editable box so the user can fix
+   * accent/transcription errors and confirm before it reaches the model. */
+  const appendDraft = (text: string) => {
+    if (text.trim()) setDraft((d) => (d.trim() ? `${d.trim()} ${text.trim()}` : text.trim()))
+  }
+
+  const toggleMic = async () => {
+    if (serverStt) {
+      if (listening) {
+        setListening(false)
+        setInterim('⏳ transcribing…')
+        setTranscribing(true)
+        try {
+          const blob = await recorder.current.stop()
+          if (blob) appendDraft(await api.transcribeAudio(blob))
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err))
+        } finally {
+          setTranscribing(false)
+          setInterim('')
+        }
+      } else {
+        speaker.current.cancel() // barge-in: talking interrupts the interviewer
+        setError('')
+        try {
+          await recorder.current.start()
+          setListening(true)
+          setInterim('🎙️ recording…')
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      }
+      return
+    }
+    // Fallback: live browser dictation (unchanged).
     if (listening) {
-      // D15: don't auto-send raw speech-to-text — drop it into the editable box so the
-      // user can fix accent/transcription errors and confirm before it reaches the model.
       const text = listener.current.stop()
       setListening(false)
       setInterim('')
-      if (text.trim()) setDraft((d) => (d.trim() ? `${d.trim()} ${text.trim()}` : text.trim()))
+      appendDraft(text)
     } else {
-      speaker.current.cancel() // barge-in: talking interrupts the interviewer
+      speaker.current.cancel()
       setError('')
       try {
         listener.current.start(setInterim)
@@ -167,7 +213,8 @@ export function Interview({
     if (interviewId === null) return
     speaker.current.cancel()
     if (listening) {
-      listener.current.stop()
+      if (serverStt) void recorder.current.stop()
+      else listener.current.stop()
       setListening(false)
     }
     setEvaluating(true)
@@ -191,7 +238,7 @@ export function Interview({
       </>
     )
 
-  const busy = thinking || partial !== null
+  const busy = thinking || partial !== null || transcribing
 
   return (
     <>
@@ -249,9 +296,11 @@ export function Interview({
 
       {!done && mode === 'voice' && (
         <div className="hint" style={{ marginBottom: 4 }}>
-          {listening
-            ? 'Listening — tap ■ to stop, then review and edit before sending'
-            : 'Tap 🎤 to speak. Your words land in the box below — fix anything, then Send.'}
+          {transcribing
+            ? 'Transcribing your answer…'
+            : listening
+              ? 'Listening — tap ■ to stop, then review and edit before sending'
+              : 'Tap 🎤 to speak. Your words land in the box below — fix anything, then Send.'}
         </div>
       )}
 
@@ -278,7 +327,7 @@ export function Interview({
             <button
               className={`mic ${listening ? 'live' : ''}`}
               disabled={busy}
-              onClick={toggleMic}
+              onClick={() => void toggleMic()}
               title="Dictate your answer"
             >
               {listening ? '■' : '🎤'}

@@ -220,6 +220,93 @@ async function chatOpenAICompatible(
   return { text: full, usage: withFallback(full, usage) }
 }
 
+// ── audio transcription (R30) ───────────────────────────────────────
+
+export interface TranscribeResult {
+  text: string
+  usage: TokenUsage
+}
+
+/**
+ * A transcription endpoint's `usage` row is shaped differently from chat (`input_tokens`/
+ * `output_tokens` at top level, not `prompt_tokens`/`completion_tokens`) — confirmed against a
+ * real Arvan GPT-4o-Transcribe response.
+ */
+interface TranscriptionUsage {
+  input_tokens?: number
+  output_tokens?: number
+}
+
+/** Coarse non-zero metering floor when a gateway omits transcription usage. */
+function estimateTranscribeUsage(audioBytes: number, text: string): TokenUsage {
+  return { inputTokens: Math.ceil(audioBytes / 750), outputTokens: Math.ceil(text.length / 4) }
+}
+
+interface TranscribeOpts {
+  endpoint: string
+  authHeader: string
+  label: string
+}
+
+/** Shared request path for OpenAI-compatible audio transcription (Arvan today; OpenAI shares the shape). */
+async function transcribeOpenAICompatible(
+  audio: Uint8Array,
+  mimeType: string,
+  filename: string,
+  model: string,
+  opts: TranscribeOpts,
+): Promise<TranscribeResult> {
+  const form = new FormData()
+  form.append('file', new Blob([audio], { type: mimeType }), filename)
+  form.append('model', model)
+  const res = await fetch(opts.endpoint, {
+    method: 'POST',
+    headers: { authorization: opts.authHeader },
+    body: form,
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`${opts.label} transcription error ${res.status}: ${body.slice(0, 500)}`)
+  }
+  const data = (await res.json()) as { text?: string; usage?: TranscriptionUsage }
+  const text = data.text ?? ''
+  const inputTokens = data.usage?.input_tokens ?? 0
+  const outputTokens = data.usage?.output_tokens ?? 0
+  const usage =
+    inputTokens === 0 && outputTokens === 0
+      ? estimateTranscribeUsage(audio.length, text)
+      : { inputTokens, outputTokens }
+  return { text, usage }
+}
+
+/** Transcribe audio to text via the configured model's provider (Arvan/OpenAI only — D20/R30). */
+export async function transcribe(
+  cfg: AppConfig,
+  audio: Uint8Array,
+  mimeType: string,
+  filename: string,
+): Promise<TranscribeResult> {
+  switch (cfg.provider) {
+    case 'arvan': {
+      const base = (cfg.baseUrl ?? '').replace(/\/+$/, '')
+      if (!base) throw new Error('Arvan model is missing its gateway base URL')
+      return transcribeOpenAICompatible(audio, mimeType, filename, cfg.model, {
+        endpoint: `${base}/audio/transcriptions`,
+        authHeader: `apikey ${cfg.apiKey}`,
+        label: 'Arvan',
+      })
+    }
+    case 'openai':
+      return transcribeOpenAICompatible(audio, mimeType, filename, cfg.model, {
+        endpoint: 'https://api.openai.com/v1/audio/transcriptions',
+        authHeader: `Bearer ${cfg.apiKey}`,
+        label: 'OpenAI',
+      })
+    default:
+      throw new Error(`${cfg.provider} does not support server-side transcription`)
+  }
+}
+
 // ── CLI providers (use a local subscription, no API key) ───────────
 
 /** Render system + transcript into one prompt for a single-shot CLI call. */
@@ -526,13 +613,43 @@ async function chatMock(system: string, messages: ChatMessage[], onDelta?: OnDel
 
 // ── helpers ─────────────────────────────────────────────────────────
 
-/** Cheap round-trip used to validate a freshly entered API key. */
+/** A ~0.3s silent 8kHz mono 16-bit WAV — cheap enough to probe a transcription-only key (R30). */
+function silentWavProbe(): Uint8Array {
+  const sampleRate = 8000
+  const dataSize = Math.floor(sampleRate * 0.3) * 2
+  const buf = Buffer.alloc(44 + dataSize)
+  buf.write('RIFF', 0)
+  buf.writeUInt32LE(36 + dataSize, 4)
+  buf.write('WAVE', 8)
+  buf.write('fmt ', 12)
+  buf.writeUInt32LE(16, 16)
+  buf.writeUInt16LE(1, 20) // PCM
+  buf.writeUInt16LE(1, 22) // mono
+  buf.writeUInt32LE(sampleRate, 24)
+  buf.writeUInt32LE(sampleRate * 2, 28) // byte rate
+  buf.writeUInt16LE(2, 32) // block align
+  buf.writeUInt16LE(16, 34) // bits per sample
+  buf.write('data', 36)
+  buf.writeUInt32LE(dataSize, 40)
+  return new Uint8Array(buf) // rest is zeroed = silence
+}
+
+/**
+ * Cheap round-trip used to validate a freshly entered API key/model. Tries chat first; a
+ * transcription-only curated model (e.g. GPT-4o-Transcribe) has no chat channel at all, so on
+ * failure we retry with a tiny silent-audio probe before declaring the key invalid (R30).
+ */
 export async function validateKey(cfg: AppConfig): Promise<{ ok: boolean; error?: string }> {
   try {
     await chat(cfg, 'Reply with the single word: ok', [{ role: 'user', content: 'ping' }], 16)
     return { ok: true }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  } catch (chatErr) {
+    try {
+      await transcribe(cfg, silentWavProbe(), 'audio/wav', 'probe.wav')
+      return { ok: true }
+    } catch {
+      return { ok: false, error: chatErr instanceof Error ? chatErr.message : String(chatErr) }
+    }
   }
 }
 

@@ -10,9 +10,16 @@ import {
 import { voiceSupported } from '../voice'
 import { ReportView } from './Report'
 
+const fmtTokens = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`)
+
 export function Dashboard({
   profile,
   email,
+  hosted,
+  interviewReady,
+  creditLeft,
+  firstImpressionsUsed,
+  firstImpressionsLimit,
   onStartInterview,
   onResumeInterview,
   onNewProfile,
@@ -24,6 +31,11 @@ export function Dashboard({
 }: {
   profile: Profile
   email: string | null
+  hosted: boolean
+  interviewReady: boolean
+  creditLeft: number | null
+  firstImpressionsUsed: number
+  firstImpressionsLimit: number
   onStartInterview: (
     mode: 'voice' | 'text',
     kind: 'full' | 'coaching',
@@ -239,7 +251,39 @@ export function Dashboard({
         </div>
       )}
 
+      {/* Cost clarity (hosted): free first impressions vs. metered interviews, and whether the
+          user can start one right now. Local mode is unrestricted, so this is hosted-only. */}
+      {hosted && (
+        <div className="card" style={{ borderColor: interviewReady ? undefined : 'var(--accent)' }}>
+          <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <b>{interviewReady ? '✅ Ready to interview' : '💳 Interviews are metered'}</b>
+              <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>
+                Your{' '}
+                <b>
+                  {firstImpressionsUsed}/{firstImpressionsLimit}
+                </b>{' '}
+                free first impressions (résumé, company research, level check) are used up as you onboard
+                positions. Full interviews run on your balance
+                {creditLeft !== null ? ` — ${fmtTokens(creditLeft)} tokens left` : ''}. The voice (audio)
+                model is always included; you just pick the brain model.
+              </div>
+            </div>
+            {!interviewReady && (
+              <span className="badge open" style={{ alignSelf: 'center' }}>
+                pick a model to start
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <h2>Start a mock interview</h2>
+      {hosted && !interviewReady && (
+        <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>
+          Starting an interview will open the model chooser (add balance + pick your interviewer).
+        </p>
+      )}
       {/* R33 / D22: pick the interview domain; the cards below launch it in that domain. */}
       <div className="row" style={{ gap: 8, marginBottom: 4, alignItems: 'center' }}>
         <span style={{ color: 'var(--muted)', fontSize: 13 }}>Kind:</span>

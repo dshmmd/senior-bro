@@ -5,11 +5,11 @@ const PACKS = [100_000, 500_000, 1_000_000]
 const fmt = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`)
 
 /**
- * Plan gate (D11 / Phase 13). Shown after the free level-check when the user has no
- * usable setup yet. Two ways forward: a paid 'host' plan (mocked checkout or an invite
- * code grants token credit, then pick a provided model) or free BYO-key.
+ * Interview-start gate (D11 / Phase 13; reworked). The free tier is 3 "first impressions"
+ * (résumé, company research, level check). Interviews are metered: add balance (mocked
+ * checkout or an invite code), then pick the model that runs them. BYOK is retired.
  */
-export function Plan({ onDone, onChooseByok }: { onDone: () => void; onChooseByok: () => void }) {
+export function Plan({ onDone }: { onDone: () => void }) {
   const [usage, setUsage] = useState<UsageInfo | null>(null)
   const [models, setModels] = useState<ModelOption[]>([])
   const [code, setCode] = useState('')
@@ -74,10 +74,10 @@ export function Plan({ onDone, onChooseByok }: { onDone: () => void; onChooseByo
 
   return (
     <>
-      <h1>Choose how to continue</h1>
+      <h1>Set up your interviews</h1>
       <p className="sub">
-        Your free first impression is done 🎉 To run full interviews, pick a plan. You can switch later in
-        settings.
+        Your <b>3 free first impressions</b> cover résumé parsing, company research and the level check. Full
+        interviews are metered — add a little balance, then pick the model that runs them.
       </p>
 
       {usage && (
@@ -112,34 +112,10 @@ export function Plan({ onDone, onChooseByok }: { onDone: () => void; onChooseByo
       )}
       {error && <div className="error">{error}</div>}
 
-      <h2>💳 Host models — paid</h2>
+      <h2>💳 Add balance</h2>
       <div className="card">
-        {hasCredit && (
-          <>
-            <p style={{ marginTop: 0 }}>
-              You have <b>{fmt(creditLeft)}</b> tokens of credit. Pick a model to start:
-            </p>
-            <div className="provider-grid">
-              {models.map((m) => (
-                <div key={m.id} className="card clickable" onClick={() => void pick(m)}>
-                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                    <b>{m.label}</b>
-                    {m.is_default && <span className="badge resolved">recommended</span>}
-                  </div>
-                  <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
-                    {m.provider} · {m.model}
-                  </div>
-                </div>
-              ))}
-              {models.length === 0 && (
-                <p style={{ color: 'var(--muted)' }}>No models available yet — ask the admin to add one.</p>
-              )}
-            </div>
-            <h3 style={{ marginBottom: 4 }}>Need more credit?</h3>
-          </>
-        )}
         <p style={{ marginTop: 0 }}>
-          Metered by tokens. Payment is <b>mocked</b> for now — pick a pack to add credit instantly.
+          Metered by tokens. Payment is <b>mocked</b> for now — pick a pack to add balance instantly.
         </p>
         <div className="row">
           {PACKS.map((p) => (
@@ -166,14 +142,36 @@ export function Plan({ onDone, onChooseByok }: { onDone: () => void; onChooseByo
         </div>
       </div>
 
-      <h2>🔑 Bring your own key — free</h2>
+      <h2>🧠 Pick your interviewer model</h2>
       <div className="card">
-        <p style={{ marginTop: 0 }}>
-          Use your own Claude or OpenAI API key. Your provider bills you directly; we don't meter it.
-        </p>
-        <button className="secondary" onClick={onChooseByok}>
-          Set up my own key →
-        </button>
+        {!hasCredit && (
+          <p style={{ marginTop: 0, color: 'var(--muted)' }}>
+            Add some balance above first — then choose the model that runs your interviews.
+          </p>
+        )}
+        <div className="provider-grid" style={{ opacity: hasCredit ? 1 : 0.5 }}>
+          {models.map((m) => (
+            <div
+              key={m.id}
+              className="card clickable"
+              onClick={() => hasCredit && void pick(m)}
+              style={{ cursor: hasCredit ? 'pointer' : 'not-allowed' }}
+            >
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <b>{m.label}</b>
+                {m.is_default && <span className="badge resolved">recommended</span>}
+              </div>
+              <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
+                {m.provider} · {m.model}
+                {m.capability_tier ? ` · ${m.capability_tier}` : ''}
+                {m.price_in > 0 || m.price_out > 0 ? ` — $${m.price_in}/$${m.price_out} per 1M tokens` : ''}
+              </div>
+            </div>
+          ))}
+          {models.length === 0 && (
+            <p style={{ color: 'var(--muted)' }}>No models available yet — ask the admin to add one.</p>
+          )}
+        </div>
       </div>
     </>
   )

@@ -59,6 +59,14 @@ export const FEATURES: readonly FeatureDef[] = [
     label: 'Study plan',
     hint: 'Build a post-interview study plan from the candidate’s gaps (Phase 7).',
   },
+  {
+    key: 'voice.transcribe',
+    label: 'Voice transcription',
+    hint:
+      'Server-side speech-to-text for voice interviews (R30). Must be a transcription-capable ' +
+      'model (e.g. GPT-4o-Transcribe), not a chat model — unassigned falls back to the browser’s ' +
+      'built-in dictation instead of a global default.',
+  },
 ] as const
 
 export type FeatureKey = (typeof FEATURES)[number]['key']

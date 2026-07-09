@@ -6,6 +6,17 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 4747
+    },
+    {
+      "name": "senior-bro-hosted",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/dist/index.js"],
+      "port": 4747,
+      "env": {
+        "SENIORBRO_MODE": "hosted",
+        "SENIORBRO_SECRET": "demo-secret-000000000000000000000000",
+        "SENIORBRO_ADMIN_EMAILS": "admin@demo.test"
+      }
     }
   ]
 }

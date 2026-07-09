@@ -8,3 +8,6 @@ dist/
 playwright-report/
 test-results/
 .idea/
+
+# Local demo model configs (contains provider keys) — never commit
+.demo-models.json

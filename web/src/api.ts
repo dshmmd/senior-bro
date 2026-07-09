@@ -240,6 +240,11 @@ export interface Health {
   plan: PlanKind | null
   configured: boolean
   has_model: boolean
+  // Free-tier "first impression" budget (R32) + whether a (paid) interview can start right now.
+  credit_left: number | null
+  first_impressions_used: number
+  first_impressions_limit: number
+  interview_ready: boolean
 }
 
 export interface ModelOption {
@@ -451,6 +456,19 @@ export const api = {
   models: () => request<{ models: ModelOption[]; selected_model_id: number | null }>('/models'),
   selectModel: (model_id: number) => post<{ ok: boolean }>('/models/select', { model_id }),
   usage: () => request<UsageInfo>('/usage'),
+  // voice transcription (R30): whether an admin has assigned a transcription model, and the
+  // upload itself. Falls back to browser dictation client-side when unavailable/on error.
+  voiceAvailable: () => request<{ available: boolean }>('/voice/available'),
+  transcribeAudio: async (audio: Blob): Promise<string> => {
+    const fd = new FormData()
+    fd.append('file', audio, 'answer.webm')
+    const res = await fetch('/api/voice/transcribe', { method: 'POST', credentials: 'same-origin', body: fd })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new Error(body.error ?? `Request failed: ${res.status}`)
+    }
+    return ((await res.json()) as { text: string }).text
+  },
   // plans, mocked payment & invite redemption (D11)
   planCheckout: (tokens: number) =>
     post<{ ok: boolean; plan: PlanKind; granted: number }>('/plan/checkout', { tokens }),
