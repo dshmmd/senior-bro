@@ -180,18 +180,23 @@ Fixes W9. **Do this before touching server code** — it's the safety net for RF
 
 #### RF-3 · Break up the server monolith — L
 Fixes W8. Pure move-and-split; RF-2's suite proves nothing broke.
-- [ ] `server/src/routes/` split by domain: `auth.ts`, `admin.ts`, `profiles.ts`,
-      `calibration.ts`, `interviews.ts`, `packs.ts`, `career.ts`, `voice.ts`,
-      `plan.ts`, `usage.ts`, `me.ts` — composed in an `index.ts` that owns
-      middleware order. Target: no route file >300 lines.
-- [ ] Extract cross-cutting services out of route handlers into `server/src/services/`:
-      `entitlement.ts` (enforceEntitlement + free-impression logic),
-      `modelRunner.ts` (resolveCall + runModel + metering), `interviewEngine.ts`
-      (start/message/finish/evaluate/distill orchestration).
-- [ ] Split `db.ts` into per-domain query modules (`server/src/db/…`) re-exported
-      through the existing `db` object so call sites keep working; same for
-      `prompts.ts` (seeds vs. render helpers vs. guardrail).
+- [x] **Slice 1 (2026-07-09): `routes.ts` (1,598 lines) deleted.** Split into
+      `server/src/routes/` — `index.ts` (composition + onError), `shared.ts`
+      (parseBody/wantsStream/ownProfile/ownInterview), `health.ts`, `auth.ts`,
+      `models.ts`, `voice.ts`, `plan.ts`, `admin.ts`, `packs.ts`, `career.ts`,
+      `profiles.ts` (incl. calibration), `interviews.ts`, `me.ts` — largest 294
+      lines. Cross-cutting logic extracted to `server/src/services/`:
+      `entitlement.ts` (ResolvedCall/resolveCall/enforceEntitlement/requireCall),
+      `model-runner.ts` (runModel/meterUsage), `pack-generator.ts` (draftPack/
+      generatePack — also de-duplicated admin regenerate's copy), and
+      `interview-engine.ts` (systemFor/distillUserModel). Zod schemas live beside
+      their routes (RF-4 will lift them to `shared/`).
+- [ ] Slice 2: split `db.ts` (1,311 lines) into per-domain query modules
+      (`server/src/db/…`) re-exported through the existing `db` object so call
+      sites keep working; same for `prompts.ts` (seeds vs. render helpers vs.
+      guardrail).
 - **Gate:** `make check` + full integration suite green; zero behavior diffs.
+  ✔ slice 1 verified 2026-07-09 (check + integration + e2e all green).
 
 #### RF-4 · One source of truth for API types — M
 Fixes W10.
