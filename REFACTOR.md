@@ -191,12 +191,17 @@ Fixes W8. Pure move-and-split; RF-2's suite proves nothing broke.
       generatePack — also de-duplicated admin regenerate's copy), and
       `interview-engine.ts` (systemFor/distillUserModel). Zod schemas live beside
       their routes (RF-4 will lift them to `shared/`).
-- [ ] Slice 2: split `db.ts` (1,311 lines) into per-domain query modules
-      (`server/src/db/…`) re-exported through the existing `db` object so call
-      sites keep working; same for `prompts.ts` (seeds vs. render helpers vs.
-      guardrail).
-- **Gate:** `make check` + full integration suite green; zero behavior diffs.
-  ✔ slice 1 verified 2026-07-09 (check + integration + e2e all green).
+- [x] **Slice 2 (2026-07-09): `db.ts` (1,311) + `prompts.ts` (725) split.**
+      `db.ts` is now a barrel over `server/src/db/` — client (shared pool/handle),
+      init (migrate+seed), users, profiles (+calibrations/first-impressions),
+      interviews (+weaknesses), claims, personalization, models (+feature routing),
+      billing (usage+invites), prompts, packs; largest 208 lines. `prompts.ts` is a
+      barrel over `server/src/prompts/` — seeds.ts (PROMPT_SEEDS bodies),
+      guardrail.ts (the fixed D13 frame), render.ts (pure fillers + code-injected
+      blocks). Import paths unchanged (`./db.js`, `./prompts.js`) so routes/
+      services/tests/scripts didn't move.
+- **RF-3 COMPLETE.** **Gate:** `make check` + full integration suite green; zero
+  behavior diffs. ✔ both slices verified 2026-07-09 (check + integration + e2e).
 
 #### RF-4 · One source of truth for API types — M
 Fixes W10.
