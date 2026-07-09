@@ -6,7 +6,7 @@ import { requireUser } from '../auth.js'
 import { HttpError } from '../http.js'
 import { isHosted } from '../mode.js'
 import * as db from '../db.js'
-import { FREE_IMPRESSION_LIMIT, resolveCall } from '../services/entitlement.js'
+import { FREE_IMPRESSION_LIMIT, TOKENS_PER_INTERVIEW, resolveCall } from '../services/entitlement.js'
 import { parseBody } from './shared.js'
 
 const modelSelectSchema = z.object({ model_id: z.number().int().positive() })
@@ -52,6 +52,7 @@ export function registerModelRoutes(api: Hono): void {
       first_impressions_used: impressionsUsed,
       first_impressions_limit: FREE_IMPRESSION_LIMIT,
       capability_tier: tier,
+      interview_estimate_tokens: TOKENS_PER_INTERVIEW,
     } satisfies UsageInfo)
   })
 }

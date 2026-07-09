@@ -9,7 +9,7 @@ import { isHosted, MODE } from '../mode.js'
 import * as db from '../db.js'
 import { validateKey } from '../providers.js'
 import { classifyByName, probeTier } from '../capability.js'
-import { FREE_IMPRESSION_LIMIT, resolveTier } from '../services/entitlement.js'
+import { FREE_IMPRESSION_LIMIT, TOKENS_PER_INTERVIEW, resolveTier } from '../services/entitlement.js'
 import { parseBody } from './shared.js'
 
 const configSchema = z
@@ -69,6 +69,7 @@ export function registerHealthRoutes(api: Hono): void {
       first_impressions_used: impressionsUsed,
       first_impressions_limit: FREE_IMPRESSION_LIMIT,
       interview_ready: interviewReady,
+      interview_estimate_tokens: TOKENS_PER_INTERVIEW,
     } satisfies Health)
   })
 

@@ -21,6 +21,16 @@ import { classifyByName, isTier, type Tier } from '../capability.js'
 export const FREE_IMPRESSION_LIMIT = 3
 
 /**
+ * RF-7 (owner: user-facing pricing is "bundles of practice interviews", never tokens).
+ * The rough token cost of one full interview, used to translate token balances/packs
+ * into "≈ N interviews" in the UI. Admin-configurable per deploy via env.
+ */
+export const TOKENS_PER_INTERVIEW = Math.max(
+  1000,
+  Number(process.env.SENIORBRO_TOKENS_PER_INTERVIEW ?? 25_000) || 25_000,
+)
+
+/**
  * What a model call is for — gates which plans may make it (D11/D21). The onboarding kinds
  * ('resume' | 'calibration' | 'pack') draw from the free "first impression" budget; 'interview'
  * never does.

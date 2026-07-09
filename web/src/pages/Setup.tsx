@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type ModelOption } from '../api'
+import { TIER_LABELS } from '../strings'
 
 interface ProviderOption {
   id: string
@@ -80,33 +81,34 @@ export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?:
       <h1>Choose your interviewer</h1>
       <p className="sub">
         {hosted
-          ? 'Pick the model that runs your interviews. Your first 3 “first impressions” (résumé, company research, level check) are free — interviews are metered against your balance. You can change this anytime.'
+          ? 'Pick the interviewer that runs your sessions. Your first 3 free steps (résumé, company research, placement chat) are free — practice interviews come from your bundle. You can change this anytime.'
           : 'Senior Bro runs entirely on your machine. Use a subscription you already pay for — no API credits required. Nothing leaves your machine except the calls to your chosen AI.'}
       </p>
 
       {curated.length > 0 && (
         <>
-          <h2>Provided models</h2>
+          <h2>Provided interviewers</h2>
           <div className="provider-grid">
-            {curated.map((m) => (
-              <div key={m.id} className="card clickable" onClick={() => void pickCurated(m)}>
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                  <b>{m.label}</b>
-                  {m.is_default && <span className="badge resolved">recommended</span>}
+            {curated.map((m) => {
+              const tier = m.capability_tier ? TIER_LABELS[m.capability_tier] : null
+              return (
+                <div key={m.id} className="card clickable" onClick={() => void pickCurated(m)}>
+                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                    <b>{m.label}</b>
+                    {m.is_default && <span className="badge resolved">recommended</span>}
+                  </div>
+                  <div className="muted fs-sm" style={{ marginTop: 4 }}>
+                    {tier ? `${tier.label} — ${tier.hint}` : 'Balanced quality'}
+                  </div>
                 </div>
-                <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
-                  {m.provider} · {m.model}
-                  {m.capability_tier ? ` · ${m.capability_tier}` : ''}
-                  {m.price_in > 0 || m.price_out > 0 ? ` — $${m.price_in}/$${m.price_out} per 1M tokens` : ''}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </>
       )}
 
       {curated.length === 0 && hosted && (
-        <div className="card">No models are available yet — ask the admin to add one.</div>
+        <div className="card">Nothing to pick yet — please check back soon.</div>
       )}
 
       {/* Local mode only: connect a subscription CLI (no API key, no balance). */}

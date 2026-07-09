@@ -57,7 +57,7 @@ export function Memory({ onBack }: { onBack: () => void }) {
   const clear = async () => {
     const ok = await confirm({
       title: 'Forget everything we know about you?',
-      body: 'The learner model for this profile is deleted and personalization starts over. This cannot be undone.',
+      body: 'Everything your coach remembers about you for this profile is deleted and personalization starts over. This cannot be undone.',
       confirmLabel: 'Forget it all',
       danger: true,
     })
@@ -102,7 +102,7 @@ export function Memory({ onBack }: { onBack: () => void }) {
 
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <b>Your learner model</b>
+          <b>What your coach remembers</b>
           {data.updated_at && (
             <span style={{ color: 'var(--muted)', fontSize: 12 }}>
               {data.edited ? 'edited by you' : 'auto-updated'} · {data.updated_at.slice(0, 16)}

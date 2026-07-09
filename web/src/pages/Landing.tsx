@@ -128,7 +128,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       <section className="hero" onClick={() => sceneRef.current?.morph()}>
         <canvas ref={canvasRef} className="hero-canvas" />
         <div className="hero-inner">
-          <div className="hero-badge">🔒 local-first · your key · your data</div>
+          <div className="hero-badge">🎙️ practice for real · voice or text · your data stays yours</div>
           <h1 className="hero-title">
             Interview like it's <span>game day.</span>
           </h1>
@@ -171,9 +171,9 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             Scored across five dimensions with transcript-cited feedback — the report a real committee writes,
             but for your eyes.
           </TiltCard>
-          <TiltCard icon="🔑" title="Your key, your rules">
-            Bring your own Claude or OpenAI key. Everything stays on your machine. Voice runs in the browser —
-            zero extra cost.
+          <TiltCard icon="🎓" title="It teaches while it tests">
+            Stuck on a question? The interviewer turns it into a quick lesson, then lets you try again — you
+            leave every session knowing more than you came with.
           </TiltCard>
         </div>
       </section>
@@ -199,13 +199,13 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         <div className="step-row">
           <div className="step">
             <span>1</span>
-            <b>Paste your AI key</b>
-            <p>Claude or OpenAI. Validated instantly, stored only on your machine.</p>
+            <b>Tell us about you</b>
+            <p>Upload your résumé — or answer a few quick questions. Your first steps are free.</p>
           </div>
           <div className="step">
             <span>2</span>
-            <b>Tell it your target</b>
-            <p>Role, company, tech stack. Take the 5-question level check.</p>
+            <b>Get placed</b>
+            <p>A short placement chat finds your level, so every question lands at your edge.</p>
           </div>
           <div className="step">
             <span>3</span>

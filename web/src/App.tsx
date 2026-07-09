@@ -357,6 +357,7 @@ function DashboardRoute() {
       creditLeft={h.credit_left}
       firstImpressionsUsed={h.first_impressions_used}
       firstImpressionsLimit={h.first_impressions_limit}
+      interviewEstimate={h.interview_estimate_tokens}
       onStartInterview={startInterview}
       onResumeInterview={(id, mode, kind) => void navigate(`/interview/${id}?mode=${mode}&kind=${kind}`)}
       onOpenReport={(id) => void navigate(`/report/${id}`)}

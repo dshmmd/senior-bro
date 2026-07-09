@@ -5,9 +5,8 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { NavCard } from '../components/Card'
 import { useInterviews, useProfiles, useWeaknesses } from '../queries'
+import { interviewsLabel } from '../strings'
 import { useQueryClient } from '@tanstack/react-query'
-
-const fmtTokens = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`)
 
 export function Dashboard({
   profile,
@@ -17,6 +16,7 @@ export function Dashboard({
   creditLeft,
   firstImpressionsUsed,
   firstImpressionsLimit,
+  interviewEstimate,
   onStartInterview,
   onResumeInterview,
   onOpenReport,
@@ -34,6 +34,7 @@ export function Dashboard({
   creditLeft: number | null
   firstImpressionsUsed: number
   firstImpressionsLimit: number
+  interviewEstimate: number
   onStartInterview: (
     mode: 'voice' | 'text',
     kind: 'full' | 'coaching',
@@ -223,21 +224,21 @@ export function Dashboard({
         <div className="card" style={{ borderColor: interviewReady ? undefined : 'var(--accent)' }}>
           <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <b>{interviewReady ? '✅ Ready to interview' : '💳 Interviews are metered'}</b>
+              <b>{interviewReady ? '✅ Ready to interview' : '💳 Add practice interviews to start'}</b>
               <div className="muted fs-sm" style={{ marginTop: 2 }}>
                 Your{' '}
                 <b>
                   {firstImpressionsUsed}/{firstImpressionsLimit}
                 </b>{' '}
-                free first impressions (résumé, company research, level check) are used up as you onboard
-                positions. Full interviews run on your balance
-                {creditLeft !== null ? ` — ${fmtTokens(creditLeft)} tokens left` : ''}. The voice (audio)
-                model is always included; you just pick the brain model.
+                free first steps (résumé, company research, placement chat) are used up as you add positions.
+                Practice interviews come from your bundle
+                {creditLeft !== null ? ` — ${interviewsLabel(creditLeft, interviewEstimate)} left` : ''}.
+                Voice is always included.
               </div>
             </div>
             {!interviewReady && (
               <span className="badge open" style={{ alignSelf: 'center' }}>
-                pick a model to start
+                set up to start
               </span>
             )}
           </div>
@@ -247,7 +248,7 @@ export function Dashboard({
       <h2>Start a mock interview</h2>
       {hosted && !interviewReady && (
         <p className="muted fs-sm" style={{ marginTop: 0 }}>
-          Starting an interview will open the model chooser (add balance + pick your interviewer).
+          Starting an interview will open setup (add a bundle + pick your interviewer).
         </p>
       )}
       {/* R33 / D22: pick the interview domain; the cards below launch it in that domain. */}

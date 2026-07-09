@@ -199,6 +199,8 @@ export interface Health {
   first_impressions_used: number
   first_impressions_limit: number
   interview_ready: boolean
+  /** Rough tokens-per-interview estimate (RF-7): the UI shows balances as "≈ N interviews". */
+  interview_estimate_tokens: number
 }
 
 export interface ModelOption {
@@ -230,6 +232,7 @@ export interface UsageInfo {
   first_impressions_used: number
   first_impressions_limit: number
   capability_tier: string | null
+  interview_estimate_tokens: number
 }
 
 // ── admin console ─────────────────────────────────────────────────────
