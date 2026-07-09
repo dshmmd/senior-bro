@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
 import { NavCard } from '../components/Card'
 import { useInterviews, useProfiles, useWeaknesses } from '../queries'
+import { useQuery } from '@tanstack/react-query'
 import { interviewsLabel } from '../strings'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -56,6 +57,9 @@ export function Dashboard({
   const interviews = useInterviews()
   const weaknessesQ = useWeaknesses()
   const profilesQ = useProfiles()
+  // RF-8: streak nudge — the daily-practice fire lives on the dashboard header.
+  const progressQ = useQuery({ queryKey: ['progress'], queryFn: api.progress })
+  const streak = Math.max(0, ...(progressQ.data?.domains.map((d) => d.progress.streak.current) ?? [0]))
   // Which interview domain the Start cards launch (R33 / D22).
   const [domain, setDomain] = useState<InterviewDomain>('technical')
   const canVoice = voiceSupported()
@@ -105,7 +109,14 @@ export function Dashboard({
 
   return (
     <>
-      <h1>{returning ? 'Welcome back' : 'Ready when you are'}</h1>
+      <h1>
+        {returning ? 'Welcome back' : 'Ready when you are'}
+        {streak > 1 && (
+          <span className="badge senior" style={{ marginLeft: 10, verticalAlign: 'middle' }}>
+            🔥 {streak}-day streak
+          </span>
+        )}
+      </h1>
       <p className="sub">
         {profile.role}
         {profile.company ? ` @ ${profile.company}` : ''} ·{' '}

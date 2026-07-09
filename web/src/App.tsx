@@ -445,6 +445,7 @@ function InterviewNewRoute() {
       domain={asDomain(params.get('domain'))}
       weaknessId={weakness ? Number(weakness) : undefined}
       onExit={() => void invalidate().then(() => navigate('/dashboard'))}
+      onProgress={() => void invalidate().then(() => navigate('/progress'))}
     />
   )
 }
@@ -466,6 +467,7 @@ function InterviewResumeRoute() {
       domain={asDomain(params.get('domain'))}
       resumeId={resumeId}
       onExit={() => void invalidate().then(() => navigate('/dashboard'))}
+      onProgress={() => void invalidate().then(() => navigate('/progress'))}
     />
   )
 }

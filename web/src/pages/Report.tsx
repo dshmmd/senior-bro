@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type InterviewReport } from '../api'
+import { CountUp } from '../components/Celebration'
 import { useToast } from '../components/Toast'
 
 export function ReportCard({ report }: { report: InterviewReport }) {
@@ -9,7 +10,7 @@ export function ReportCard({ report }: { report: InterviewReport }) {
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="score-ring">
-              {report.overall_score}
+              <CountUp to={report.overall_score} />
               <span style={{ fontSize: 18, color: 'var(--muted)' }}>/100</span>
             </div>
             <span className={`badge ${report.level_estimate}`}>

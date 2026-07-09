@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type InterviewDomain, type InterviewReport, type Profile } from '../api'
 import { Listener, Recorder, Speaker, recordingSupported, stopSpeaking } from '../voice'
+import { Celebration, intensityForLevel } from '../components/Celebration'
 import { ReportCard } from './Report'
 
 interface Msg {
@@ -9,6 +10,95 @@ interface Msg {
 }
 
 const stripToken = (text: string) => text.replace('[INTERVIEW_COMPLETE]', '')
+
+/**
+ * Post-interview reveal (RF-8): a celebration moment sized to the user's level
+ * (owner: loud for junior/mid, premium-subtle for senior/staff), the score
+ * counting up, "vs. last time" framing, and — when this session crystallized a
+ * new medal — a full-screen medal ceremony (the Phase 6 deferred polish).
+ */
+function ReportReveal({
+  report,
+  profile,
+  onExit,
+  onProgress,
+}: {
+  report: InterviewReport
+  profile: Profile
+  onExit: () => void
+  onProgress?: () => void
+}) {
+  const intensity = intensityForLevel(profile.level)
+  const [stage, setStage] = useState<'score' | 'medal' | 'done'>('score')
+  const [newMedal, setNewMedal] = useState<{ icon: string; title: string; detail: string } | null>(null)
+  const [delta, setDelta] = useState<number | null>(null)
+
+  useEffect(() => {
+    // "You improved" framing: compare against the previous finished interview's score.
+    api
+      .listInterviews()
+      .then((list) => {
+        const finished = list.filter((i) => i.status === 'finished' && i.overall_score !== null)
+        // list is newest-first; [0] is this interview, [1] the one before it.
+        const prev = finished[1]
+        if (prev?.overall_score != null) setDelta(report.overall_score - prev.overall_score)
+      })
+      .catch(() => undefined)
+    // Medal ceremony: did this session crystallize a medal that wasn't earned before?
+    const seenKey = `sb-medals-${profile.id}`
+    api
+      .progress()
+      .then((r) => {
+        const earned = r.domains.flatMap((d) => d.progress.medals.filter((m) => m.earned))
+        const seen = new Set<string>(JSON.parse(localStorage.getItem(seenKey) ?? '[]') as string[])
+        const fresh = earned.find((m) => !seen.has(m.id))
+        localStorage.setItem(seenKey, JSON.stringify(earned.map((m) => m.id)))
+        if (fresh) setNewMedal({ icon: fresh.icon, title: fresh.title, detail: fresh.detail })
+      })
+      .catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const strong = report.overall_score >= 75
+  return (
+    <>
+      {stage === 'score' && (
+        <Celebration
+          icon={strong ? '🎉' : '🏁'}
+          title={strong ? 'Outstanding session!' : 'Session complete!'}
+          subtitle={`You performed at a ${report.level_estimate} level${
+            delta !== null && delta > 0 ? ` — up ${delta} points from last time` : ''
+          }`}
+          intensity={intensity}
+          onDone={() => setStage(newMedal ? 'medal' : 'done')}
+        />
+      )}
+      {stage === 'medal' && newMedal && (
+        <Celebration
+          icon={newMedal.icon}
+          title={`Medal earned: ${newMedal.title}`}
+          subtitle={newMedal.detail}
+          intensity={intensity}
+          onDone={() => setStage('done')}
+        />
+      )}
+      <h1>Your interview report</h1>
+      {delta !== null && delta !== 0 && (
+        <p className="sub">
+          {delta > 0 ? `▲ ${delta} points better than your last interview — it's working.` : ''}
+          {delta < 0 ? 'A tougher one than last time — the report below shows exactly where to push.' : ''}
+        </p>
+      )}
+      <ReportCard report={report} />
+      <div className="row mt">
+        {onProgress && <button onClick={onProgress}>See my progress →</button>}
+        <button className={onProgress ? 'secondary' : ''} onClick={onExit}>
+          Back to dashboard →
+        </button>
+      </div>
+    </>
+  )
+}
 
 /**
  * One-tap steering chips (Phase 4). Each sends a short request the interviewer honors now, and a
@@ -51,6 +141,7 @@ export function Interview({
   weaknessId,
   resumeId,
   onExit,
+  onProgress,
 }: {
   profile: Profile
   mode: 'voice' | 'text'
@@ -60,6 +151,8 @@ export function Interview({
   /** When set, reload this in-progress interview from the server instead of starting fresh (D14). */
   resumeId?: number
   onExit: () => void
+  /** RF-8: the report's "See my progress →" CTA (jump to the constellation). */
+  onProgress?: () => void
 }) {
   const [interviewId, setInterviewId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
@@ -228,15 +321,7 @@ export function Interview({
   }
 
   if (report)
-    return (
-      <>
-        <h1>Your interview report</h1>
-        <ReportCard report={report} />
-        <div className="mt">
-          <button onClick={onExit}>Back to dashboard →</button>
-        </div>
-      </>
-    )
+    return <ReportReveal report={report} profile={profile} onExit={onExit} onProgress={onProgress} />
 
   const busy = thinking || partial !== null || transcribing
 
