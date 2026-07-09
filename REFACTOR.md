@@ -221,20 +221,28 @@ Fixes W10.
 
 #### RF-5 · Web foundations: router, data layer, error surface — L
 Fixes W1, W3, W4. This is the enabler for every P1 UX epic.
-- [ ] Adopt a real router (recommend TanStack Router or React Router; pick by
-      bundle size — D1). Every view gets a URL (`/dashboard`, `/interview/:id`,
-      `/progress`, `/admin/...`); refresh/back/deep-link all work; interview resume
-      becomes just `/interview/:id`.
-- [ ] Adopt a query cache (recommend TanStack Query, ~13 kB): replace per-page
-      `useEffect` fetching; central invalidation replaces the blunt `refresh()`;
-      account/health/profile become queries any page can read (kills the 9-callback
-      prop drilling).
-- [ ] Error + feedback standard: a toast/notification provider; every mutation
-      surfaces success/failure; **delete every `.catch(() => undefined)`**; a
-      shared `<ConfirmDialog>` replaces `window.confirm`.
-- [ ] Loading standard: skeleton components for card/table/chat, no more blank flashes.
-- **Gate:** `make e2e` green + a new e2e asserting refresh-in-place and browser
-  Back; grep proves no swallowed catches remain.
+- [x] **(2026-07-09) React Router v7** (library mode). Every view has a URL —
+      `/dashboard`, `/progress`, `/career`, `/study`, `/memory`, `/plan`,
+      `/setup`, `/profile`, `/calibration`, `/admin`, `/report/:id`,
+      `/interview/new?mode&kind&domain&weakness`, `/interview/:id` (resume).
+      `App.tsx` = providers + a `Gate` (deep-link-safe auth/onboarding redirects)
+      + a `Shell` layout (topbar/offline/R21-back) + thin route wrappers that
+      hand `navigate` callbacks to the still-presentational pages. Reports are
+      now deep-linkable (`/report/:id` replaced Dashboard's inline state).
+- [x] **TanStack Query v5**: `web/src/queries.ts` (health/profile/interviews/
+      weaknesses/profiles queries); mutations invalidate instead of the old
+      whole-app `refresh()`; Dashboard fully converted. (Remaining pages still
+      fetch locally — they convert as RF-6 restyles touch each one.)
+- [x] Error + feedback standard: `ToastProvider`/`useToast` + promise-based
+      `ConfirmProvider`/`useConfirm` (replaced every `window.confirm`); **zero
+      `.catch(() => undefined)` left in pages** (two deliberate, commented
+      fall-throughs remain in App.tsx: invalid magic link → login; logout).
+- [x] Loading standard: `Skeleton` component + shimmer CSS (reduced-motion aware).
+- **Gate ✔ 2026-07-09:** `make check` green; `make e2e` green incl. the new
+  `e2e/urls.spec.ts` (deep link, refresh-in-place, browser Back, 404 fallback);
+  grep proves pages have no swallowed catches. Playwright pinned to 1 worker
+  (specs share one test DB). Bundle: 308 kB raw JS (react 141 + router ~60 +
+  query ~40) — the D1 trade-off the owner approved.
 
 ---
 

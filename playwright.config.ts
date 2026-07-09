@@ -13,6 +13,9 @@ export default defineConfig({
   testDir: './e2e',
   // DB + HOME isolation happens in e2e/prepare.mjs (the "e2e" npm script runs it
   // before Playwright — the webServer boots before globalSetup, so prep can't go there).
+  // All specs share one server + one test DB, and later specs build on state earlier
+  // ones created (urls.spec reuses happy-path's calibrated profile) — keep one worker.
+  workers: 1,
   timeout: 60_000,
   use: {
     baseURL: `http://localhost:${PORT}`,

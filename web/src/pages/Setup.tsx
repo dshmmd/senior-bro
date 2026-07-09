@@ -46,7 +46,7 @@ export function Setup({ onDone, hosted = false }: { onDone: () => void; hosted?:
     void api
       .models()
       .then((r) => setCurated(r.models))
-      .catch(() => undefined)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
   }, [])
 
   const pickCurated = async (m: ModelOption) => {

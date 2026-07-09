@@ -9,6 +9,8 @@ import {
   type PromptCatalogEntry,
   type PromptVersion,
 } from '../api'
+import { useConfirm } from '../components/Confirm'
+import { useToast } from '../components/Toast'
 
 const PROVIDERS = ['anthropic', 'openai', 'arvan', 'mock'] as const
 
@@ -25,6 +27,8 @@ const blankForm = {
 }
 
 export function Admin({ onBack }: { onBack: () => void }) {
+  const toast = useToast()
+  const confirmDialog = useConfirm()
   const [models, setModels] = useState<ModelOption[]>([])
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [invites, setInvites] = useState<InviteCode[]>([])
@@ -82,15 +86,22 @@ export function Admin({ onBack }: { onBack: () => void }) {
   }
 
   const toggle = async (m: ModelOption) => {
-    await api.adminUpdateModel(m.id, { enabled: !m.enabled }).catch(() => undefined)
+    await api.adminUpdateModel(m.id, { enabled: !m.enabled }).catch(toast.error)
     await load()
   }
   const makeDefault = async (m: ModelOption) => {
-    await api.adminUpdateModel(m.id, { is_default: true }).catch(() => undefined)
+    await api.adminUpdateModel(m.id, { is_default: true }).catch(toast.error)
     await load()
   }
   const remove = async (m: ModelOption) => {
-    await api.adminDeleteModel(m.id).catch(() => undefined)
+    const ok = await confirmDialog({
+      title: `Remove "${m.label}"?`,
+      body: 'Users who selected it fall back to choosing another model.',
+      confirmLabel: 'Remove model',
+      danger: true,
+    })
+    if (!ok) return
+    await api.adminDeleteModel(m.id).catch(toast.error)
     await load()
   }
   // R35: route a feature to a specific model (empty selection → global default).
@@ -108,7 +119,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
     )
     if (raw === null) return
     const trimmed = raw.trim()
-    await api.adminSetQuota(u.id, trimmed === '' ? null : Number(trimmed)).catch(() => undefined)
+    await api.adminSetQuota(u.id, trimmed === '' ? null : Number(trimmed)).catch(toast.error)
     await load()
   }
 
@@ -131,7 +142,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
     }
   }
   const revokeInvite = async (code: string) => {
-    await api.adminRevokeInvite(code).catch(() => undefined)
+    await api.adminRevokeInvite(code).catch(toast.error)
     await load()
   }
 
@@ -476,6 +487,7 @@ const STALE_MS = 90 * 24 * 60 * 60 * 1000
  * from the model, web-search-augmented on Anthropic), or delete. Seeds + generated packs both show.
  */
 function PacksSection() {
+  const confirmDialog = useConfirm()
   const [packs, setPacks] = useState<CompanyPack[]>([])
   const [editing, setEditing] = useState<CompanyPack | null>(null)
   const [draftBody, setDraftBody] = useState('')
@@ -532,12 +544,13 @@ function PacksSection() {
     }
   }
   const remove = async (p: CompanyPack) => {
-    if (
-      !window.confirm(
-        `Delete the ${p.company} pack? Profiles using it will fall back to a generic interview.`,
-      )
-    )
-      return
+    const ok = await confirmDialog({
+      title: `Delete the ${p.company} pack?`,
+      body: 'Profiles using it will fall back to a generic interview.',
+      confirmLabel: 'Delete pack',
+      danger: true,
+    })
+    if (!ok) return
     await api.adminDeletePack(p.id).catch((e: unknown) => setError(String(e)))
     if (editing?.id === p.id) setEditing(null)
     await load()

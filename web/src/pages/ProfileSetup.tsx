@@ -21,7 +21,7 @@ export function ProfileSetup({ onDone }: { onDone: () => void }) {
     api
       .skills()
       .then(setPacks)
-      .catch(() => undefined)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
   }, [])
 
   const [researching, setResearching] = useState(false)

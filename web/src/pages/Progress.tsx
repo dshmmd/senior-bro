@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type DomainProgress, type Progress as ProgressData } from '../api'
+import { useToast } from '../components/Toast'
 import { createConstellation, type Constellation } from '../progress/constellation'
 import '../progress.css'
 
@@ -128,6 +129,7 @@ function DomainConstellation({ data }: { data: ProgressData }) {
 }
 
 export function Progress({ onBack }: { onBack: () => void }) {
+  const toast = useToast()
   const [domains, setDomains] = useState<DomainProgress[]>([])
   const [active, setActive] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -136,8 +138,9 @@ export function Progress({ onBack }: { onBack: () => void }) {
     api
       .progress()
       .then((r) => setDomains(r.domains))
-      .catch(() => undefined)
+      .catch(toast.error)
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   if (loading) return <div className="card msg thinking">Charting your constellation…</div>

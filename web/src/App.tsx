@@ -1,5 +1,25 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { api, type InterviewDomain, type Profile } from './api'
+// App shell (RF-5): real URL routing (React Router), central query cache, and the
+// account/entitlement gates. Every view has a URL — refresh, browser Back, and
+// deep links all work; pages stay presentational and get callbacks wired to
+// navigation here.
+import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
+import {
+  BrowserRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { api, type InterviewDomain } from './api'
+import { queryClient, useHealth, useInvalidateSession, useProfile } from './queries'
+import { ToastProvider } from './components/Toast'
+import { ConfirmProvider } from './components/Confirm'
+import { Skeleton } from './components/Skeleton'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Admin } from './pages/Admin'
@@ -13,29 +33,7 @@ import { Career } from './pages/Career'
 import { StudyPlan } from './pages/StudyPlan'
 import { Memory } from './pages/Memory'
 import { Plan } from './pages/Plan'
-
-export type View =
-  | { name: 'landing' }
-  | { name: 'loading' }
-  | { name: 'login' }
-  | { name: 'admin' }
-  | { name: 'setup' }
-  | { name: 'profile' }
-  | { name: 'calibration' }
-  | { name: 'plan' }
-  | { name: 'dashboard' }
-  | { name: 'progress' }
-  | { name: 'career' }
-  | { name: 'study' }
-  | { name: 'memory' }
-  | {
-      name: 'interview'
-      mode: 'voice' | 'text'
-      kind: 'full' | 'coaching'
-      domain: InterviewDomain
-      weaknessId?: number
-      resumeId?: number
-    }
+import { ReportView } from './pages/Report'
 
 function subscribeOnline(cb: () => void) {
   window.addEventListener('online', cb)
@@ -46,112 +44,160 @@ function subscribeOnline(cb: () => void) {
   }
 }
 
-const hasMagicToken = () => new URLSearchParams(window.location.search).has('magic')
+const magicToken = () => new URLSearchParams(window.location.search).get('magic')
 
 export function App() {
-  const [view, setView] = useState<View>(() =>
-    hasMagicToken() || localStorage.getItem('sb-entered') ? { name: 'loading' } : { name: 'landing' },
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <ConfirmProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Entry />} />
+              <Route path="/login" element={<LoginRoute />} />
+              <Route element={<Shell />}>
+                <Route path="/setup" element={<SetupRoute />} />
+                <Route path="/profile" element={<Gate need="none" children={<ProfileRoute />} />} />
+                <Route
+                  path="/calibration"
+                  element={<Gate need="profile" children={<CalibrationRoute />} />}
+                />
+                <Route path="/plan" element={<Gate need="none" children={<PlanRoute />} />} />
+                <Route path="/dashboard" element={<Gate need="level" children={<DashboardRoute />} />} />
+                <Route path="/progress" element={<Gate need="level" children={<ProgressRoute />} />} />
+                <Route path="/career" element={<Gate need="level" children={<CareerRoute />} />} />
+                <Route path="/study" element={<Gate need="level" children={<StudyRoute />} />} />
+                <Route path="/memory" element={<Gate need="level" children={<MemoryRoute />} />} />
+                <Route path="/admin" element={<Gate need="none" children={<AdminRoute />} />} />
+                <Route path="/report/:id" element={<Gate need="level" children={<ReportRoute />} />} />
+                <Route
+                  path="/interview/new"
+                  element={<Gate need="level" children={<InterviewNewRoute />} />}
+                />
+                <Route
+                  path="/interview/:id"
+                  element={<Gate need="level" children={<InterviewResumeRoute />} />}
+                />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </ConfirmProvider>
+      </ToastProvider>
+    </QueryClientProvider>
   )
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [account, setAccount] = useState<{
-    hosted: boolean
-    email: string | null
-    role: 'user' | 'admin' | null
-    // Interview readiness + free-tier budget (drives the interview-start gate + Dashboard status).
-    interviewReady: boolean
-    creditLeft: number | null
-    firstImpressionsUsed: number
-    firstImpressionsLimit: number
-  }>({
-    hosted: false,
-    email: null,
-    role: null,
-    interviewReady: true,
-    creditLeft: null,
-    firstImpressionsUsed: 0,
-    firstImpressionsLimit: 3,
-  })
+}
 
-  const refresh = useCallback(async () => {
-    const health = await api.health().catch(() => null)
-    if (!health) {
-      setView({ name: 'loading' })
-      return
-    }
-    const hosted = health.mode === 'hosted'
-    setAccount({
-      hosted,
-      email: health.user?.email ?? null,
-      role: health.user?.role ?? null,
-      interviewReady: health.interview_ready,
-      creditLeft: health.credit_left,
-      firstImpressionsUsed: health.first_impressions_used,
-      firstImpressionsLimit: health.first_impressions_limit,
-    })
-    if (hosted && !health.authed) {
-      setView({ name: 'login' })
-      return
-    }
-    // Local mode gate: something must be configured up front — a subscription CLI OR a selected
-    // provided model (the latter was previously ignored, which bounced model-pickers back here).
-    // Hosted mode defers all of this — the free level-check needs no setup, and the interviewer
-    // model is chosen at interview-start, not during onboarding.
-    if (!hosted && !health.configured && !health.has_model) {
-      setView({ name: 'setup' })
-      return
-    }
-    const p = await api.getProfile()
-    setProfile(p)
-    if (!p) setView({ name: 'profile' })
-    else if (!p.level) setView({ name: 'calibration' })
-    else setView({ name: 'dashboard' })
-  }, [])
+/**
+ * `/` — the front door. Handles a magic-link token, then routes returning users
+ * into the app and first-timers to the landing page.
+ */
+function Entry() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  const magic = magicToken()
 
   useEffect(() => {
-    // Arriving from a magic link: verify the token, then drop into the app.
-    if (hasMagicToken()) {
-      const token = new URLSearchParams(window.location.search).get('magic')!
-      localStorage.setItem('sb-entered', '1')
-      void api
-        .verifyMagicLink(token)
-        .catch(() => undefined)
-        .finally(() => {
-          window.history.replaceState({}, '', window.location.pathname)
-          void refresh()
-        })
-      return
-    }
-    if (localStorage.getItem('sb-entered')) void refresh()
-  }, [refresh])
-
-  const enterApp = () => {
+    if (!magic) return
     localStorage.setItem('sb-entered', '1')
-    setView({ name: 'loading' })
-    void refresh()
-  }
+    void api
+      .verifyMagicLink(magic)
+      .catch(() => undefined) // an invalid link just falls through to the login screen
+      .finally(() => {
+        window.history.replaceState({}, '', '/')
+        void invalidate().then(() => navigate('/dashboard', { replace: true }))
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (magic) return <Connecting />
+  if (localStorage.getItem('sb-entered')) return <Navigate to="/dashboard" replace />
+  return (
+    <Landing
+      onEnter={() => {
+        localStorage.setItem('sb-entered', '1')
+        void navigate('/dashboard')
+      }}
+    />
+  )
+}
+
+function LoginRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  return (
+    <Login
+      onSignedIn={() => {
+        localStorage.setItem('sb-entered', '1')
+        void invalidate().then(() => navigate('/dashboard'))
+      }}
+    />
+  )
+}
+
+function Connecting() {
+  const invalidate = useInvalidateSession()
+  return (
+    <div className="shell">
+      <div className="card">
+        Connecting to the Senior Bro server… make sure it's running (<code>npm run dev</code>).
+        <div className="mt">
+          <button onClick={() => void invalidate()}>Retry</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Account/entitlement gate for app routes (deep-link safe): waits for health,
+ * bounces unauthenticated hosted users to /login, unconfigured local users to
+ * /setup, and profile-less / uncalibrated users to the onboarding step they need.
+ */
+function Gate({ need, children }: { need: 'none' | 'profile' | 'level'; children: ReactNode }) {
+  const health = useHealth()
+  const wantProfile = need !== 'none'
+  const profile = useProfile(
+    health.data !== undefined && (health.data.mode === 'local' || health.data.authed),
+  )
+
+  if (health.isPending) return <Skeleton lines={2} />
+  if (health.isError) return <Connecting />
+  const h = health.data
+  const hosted = h.mode === 'hosted'
+  if (hosted && !h.authed) return <Navigate to="/login" replace />
+  // Local mode needs something configured up front (a CLI subscription or a selected
+  // provided model); hosted defers everything to interview-start.
+  if (!hosted && !h.configured && !h.has_model && need !== 'none') return <Navigate to="/setup" replace />
+  if (!wantProfile) return <>{children}</>
+  if (profile.isPending) return <Skeleton lines={3} />
+  const p = profile.data ?? null
+  if (!p) return <Navigate to="/profile" replace />
+  if (need === 'level' && !p.level) return <Navigate to="/calibration" replace />
+  return <>{children}</>
+}
+
+/** The persistent chrome: topbar, offline banner, R21 back button, and the page outlet. */
+function Shell() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const health = useHealth()
+  const profile = useProfile(health.data !== undefined)
+  const invalidate = useInvalidateSession()
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
+
+  const h = health.data
+  const hosted = h?.mode === 'hosted'
+  const p = profile.data ?? null
 
   const logout = async () => {
     await api.logout().catch(() => undefined)
-    setProfile(null)
-    setView({ name: 'login' })
+    await invalidate()
+    void navigate('/login')
   }
 
-  // Interview-start gate: interviews are metered, so a hosted user who isn't ready (no chosen model
-  // or no balance) is routed to the plan/model chooser first instead of hitting a mid-flow paywall.
-  const startInterview = (
-    mode: 'voice' | 'text',
-    kind: 'full' | 'coaching',
-    domain: InterviewDomain,
-    weaknessId?: number,
-  ) => {
-    if (account.hosted && !account.interviewReady) setView({ name: 'plan' })
-    else setView({ name: 'interview', mode, kind, domain, weaknessId })
-  }
-
-  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
-
-  if (view.name === 'landing') return <Landing onEnter={enterApp} />
-  if (view.name === 'login') return <Login onSignedIn={() => void refresh()} />
+  // R21: never dead-end on settings/onboarding screens once a calibrated profile exists.
+  const backable = ['/setup', '/plan', '/profile', '/calibration'].includes(location.pathname)
 
   return (
     <>
@@ -161,135 +207,243 @@ export function App() {
         </div>
       )}
       <div className="topbar">
-        <div
+        <button
           className="logo"
           onClick={() => {
             localStorage.removeItem('sb-entered')
-            setView({ name: 'landing' })
+            void navigate('/')
           }}
         >
           🎙️ Senior <span>Bro</span>
-        </div>
+        </button>
         <div className="spacer" />
-        {profile && (
-          <div className="pill">
-            {profile.role}
-            {profile.level ? ` · ${profile.level}` : ''}
-          </div>
+        {p && (
+          <span className="pill">
+            {p.role}
+            {p.level ? ` · ${p.level}` : ''}
+          </span>
         )}
-        {account.hosted && (
-          <div
-            className="pill clickable"
-            style={{ cursor: 'pointer' }}
-            onClick={() => setView({ name: 'plan' })}
-          >
+        {hosted && (
+          <button className="pill clickable" onClick={() => void navigate('/plan')}>
             💳 plan
-          </div>
+          </button>
         )}
-        {profile?.level && (
-          <div
-            className="pill clickable"
-            style={{ cursor: 'pointer' }}
-            onClick={() => setView({ name: 'memory' })}
-          >
+        {p?.level && (
+          <button className="pill clickable" onClick={() => void navigate('/memory')}>
             🧠 you
-          </div>
+          </button>
         )}
-        {account.role === 'admin' && (
-          <div
-            className="pill clickable"
-            style={{ cursor: 'pointer' }}
-            onClick={() => setView({ name: 'admin' })}
-          >
+        {h?.user?.role === 'admin' && (
+          <button className="pill clickable" onClick={() => void navigate('/admin')}>
             🛠️ admin
-          </div>
+          </button>
         )}
-        <div
-          className="pill clickable"
-          style={{ cursor: 'pointer' }}
-          onClick={() => setView({ name: 'setup' })}
-        >
+        <button className="pill clickable" onClick={() => void navigate('/setup')}>
           ⚙ settings
-        </div>
-        {account.hosted && (
-          <div className="pill clickable" style={{ cursor: 'pointer' }} onClick={() => void logout()}>
-            {account.email ? `↩ ${account.email}` : '↩ sign out'}
-          </div>
+        </button>
+        {hosted && (
+          <button className="pill clickable" onClick={() => void logout()}>
+            {h.user?.email ? `↩ ${h.user.email}` : '↩ sign out'}
+          </button>
         )}
       </div>
       <div className="shell">
-        {/* R21: a Back so users never get stuck on a settings/onboarding screen. Shown only
-            when there's a real dashboard to return to (profile is calibrated) — so it's never
-            a dead end during first-run onboarding. */}
-        {profile?.level && ['setup', 'plan', 'profile', 'calibration'].includes(view.name) && (
-          <button className="ghost" onClick={() => setView({ name: 'dashboard' })}>
+        {p?.level && backable && (
+          <button className="ghost" onClick={() => void navigate('/dashboard')}>
             ← Back
           </button>
         )}
-        {view.name === 'loading' && (
-          <div className="card">
-            Connecting to the Senior Bro server… make sure it's running (<code>npm run dev</code>).
-            <div className="mt">
-              <button onClick={() => void refresh()}>Retry</button>
-            </div>
-          </div>
-        )}
-        {view.name === 'admin' && <Admin onBack={() => setView({ name: 'dashboard' })} />}
-        {view.name === 'setup' && <Setup hosted={account.hosted} onDone={() => void refresh()} />}
-        {view.name === 'profile' && <ProfileSetup onDone={() => void refresh()} />}
-        {view.name === 'calibration' && profile && (
-          <Calibration profile={profile} onDone={() => void refresh()} />
-        )}
-        {view.name === 'plan' && <Plan onDone={() => void refresh()} />}
-        {view.name === 'dashboard' && profile && (
-          <Dashboard
-            profile={profile}
-            email={account.email}
-            hosted={account.hosted}
-            interviewReady={account.interviewReady}
-            creditLeft={account.creditLeft}
-            firstImpressionsUsed={account.firstImpressionsUsed}
-            firstImpressionsLimit={account.firstImpressionsLimit}
-            onStartInterview={startInterview}
-            onResumeInterview={(id, mode, kind) =>
-              setView({ name: 'interview', mode, kind, domain: 'technical', resumeId: id })
-            }
-            onNewProfile={() => setView({ name: 'profile' })}
-            onProfileSwitched={() => void refresh()}
-            onRecalibrate={() => setView({ name: 'calibration' })}
-            onOpenProgress={() => setView({ name: 'progress' })}
-            onOpenCareer={() => setView({ name: 'career' })}
-            onOpenStudyPlan={() => setView({ name: 'study' })}
-          />
-        )}
-        {view.name === 'progress' && <Progress onBack={() => setView({ name: 'dashboard' })} />}
-        {view.name === 'career' && profile && (
-          <Career
-            profile={profile}
-            onBack={() => setView({ name: 'dashboard' })}
-            onTargeted={() => void refresh()}
-          />
-        )}
-        {view.name === 'study' && profile && (
-          <StudyPlan
-            profile={profile}
-            onBack={() => setView({ name: 'dashboard' })}
-            onDrill={(weaknessId) => startInterview('text', 'coaching', 'technical', weaknessId)}
-          />
-        )}
-        {view.name === 'memory' && <Memory onBack={() => setView({ name: 'dashboard' })} />}
-        {view.name === 'interview' && profile && (
-          <Interview
-            profile={profile}
-            mode={view.mode}
-            kind={view.kind}
-            domain={view.domain}
-            weaknessId={view.weaknessId}
-            resumeId={view.resumeId}
-            onExit={() => void refresh()}
-          />
-        )}
+        <Outlet />
       </div>
     </>
+  )
+}
+
+// ── route wrappers: supply navigation + invalidation to the presentational pages ──
+
+function SetupRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  const health = useHealth()
+  if (health.isPending) return <Skeleton lines={2} />
+  if (health.isError) return <Connecting />
+  if (health.data.mode === 'hosted' && !health.data.authed) return <Navigate to="/login" replace />
+  return (
+    <Setup
+      hosted={health.data.mode === 'hosted'}
+      onDone={() => void invalidate().then(() => navigate('/dashboard'))}
+    />
+  )
+}
+
+function ProfileRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  return <ProfileSetup onDone={() => void invalidate().then(() => navigate('/calibration'))} />
+}
+
+function CalibrationRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  const profile = useProfile()
+  if (profile.isPending || !profile.data) return <Skeleton lines={3} />
+  return (
+    <Calibration profile={profile.data} onDone={() => void invalidate().then(() => navigate('/dashboard'))} />
+  )
+}
+
+function PlanRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  return <Plan onDone={() => void invalidate().then(() => navigate('/dashboard'))} />
+}
+
+/** Interview-start gate: metered hosted users without a model/balance go to the plan chooser. */
+function useStartInterview() {
+  const navigate = useNavigate()
+  const health = useHealth()
+  return (
+    mode: 'voice' | 'text',
+    kind: 'full' | 'coaching',
+    domain: InterviewDomain,
+    weaknessId?: number,
+  ) => {
+    const h = health.data
+    if (h?.mode === 'hosted' && !h.interview_ready) {
+      void navigate('/plan')
+      return
+    }
+    const params = new URLSearchParams({ mode, kind, domain })
+    if (weaknessId !== undefined) params.set('weakness', String(weaknessId))
+    void navigate(`/interview/new?${params.toString()}`)
+  }
+}
+
+function DashboardRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  const health = useHealth()
+  const profile = useProfile()
+  const startInterview = useStartInterview()
+  const h = health.data
+  if (!h || profile.isPending || !profile.data) return <Skeleton lines={4} />
+  return (
+    <Dashboard
+      profile={profile.data}
+      email={h.user?.email ?? null}
+      hosted={h.mode === 'hosted'}
+      interviewReady={h.interview_ready}
+      creditLeft={h.credit_left}
+      firstImpressionsUsed={h.first_impressions_used}
+      firstImpressionsLimit={h.first_impressions_limit}
+      onStartInterview={startInterview}
+      onResumeInterview={(id, mode, kind) => void navigate(`/interview/${id}?mode=${mode}&kind=${kind}`)}
+      onOpenReport={(id) => void navigate(`/report/${id}`)}
+      onNewProfile={() => void navigate('/profile')}
+      onProfileSwitched={() => void invalidate()}
+      onRecalibrate={() => void navigate('/calibration')}
+      onOpenProgress={() => void navigate('/progress')}
+      onOpenCareer={() => void navigate('/career')}
+      onOpenStudyPlan={() => void navigate('/study')}
+    />
+  )
+}
+
+function ProgressRoute() {
+  const navigate = useNavigate()
+  return <Progress onBack={() => void navigate('/dashboard')} />
+}
+
+function CareerRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  const profile = useProfile()
+  if (profile.isPending || !profile.data) return <Skeleton lines={3} />
+  return (
+    <Career
+      profile={profile.data}
+      onBack={() => void navigate('/dashboard')}
+      onTargeted={() => void invalidate()}
+    />
+  )
+}
+
+function StudyRoute() {
+  const navigate = useNavigate()
+  const profile = useProfile()
+  const startInterview = useStartInterview()
+  if (profile.isPending || !profile.data) return <Skeleton lines={3} />
+  return (
+    <StudyPlan
+      profile={profile.data}
+      onBack={() => void navigate('/dashboard')}
+      onDrill={(weaknessId) => startInterview('text', 'coaching', 'technical', weaknessId)}
+    />
+  )
+}
+
+function MemoryRoute() {
+  const navigate = useNavigate()
+  return <Memory onBack={() => void navigate('/dashboard')} />
+}
+
+function AdminRoute() {
+  const navigate = useNavigate()
+  const health = useHealth()
+  if (health.isPending) return <Skeleton lines={3} />
+  if (health.data?.user?.role !== 'admin' && health.data?.mode === 'hosted')
+    return <Navigate to="/dashboard" replace />
+  return <Admin onBack={() => void navigate('/dashboard')} />
+}
+
+function ReportRoute() {
+  const navigate = useNavigate()
+  const { id } = useParams()
+  const interviewId = Number(id)
+  if (!Number.isInteger(interviewId) || interviewId <= 0) return <Navigate to="/dashboard" replace />
+  return <ReportView interviewId={interviewId} onBack={() => void navigate('/dashboard')} />
+}
+
+const asMode = (v: string | null): 'voice' | 'text' => (v === 'voice' ? 'voice' : 'text')
+const asKind = (v: string | null): 'full' | 'coaching' => (v === 'coaching' ? 'coaching' : 'full')
+const asDomain = (v: string | null): InterviewDomain => (v === 'hr' ? 'hr' : 'technical')
+
+function InterviewNewRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  const profile = useProfile()
+  const [params] = useSearchParams()
+  if (profile.isPending || !profile.data) return <Skeleton lines={3} />
+  const weakness = params.get('weakness')
+  return (
+    <Interview
+      profile={profile.data}
+      mode={asMode(params.get('mode'))}
+      kind={asKind(params.get('kind'))}
+      domain={asDomain(params.get('domain'))}
+      weaknessId={weakness ? Number(weakness) : undefined}
+      onExit={() => void invalidate().then(() => navigate('/dashboard'))}
+    />
+  )
+}
+
+function InterviewResumeRoute() {
+  const navigate = useNavigate()
+  const invalidate = useInvalidateSession()
+  const profile = useProfile()
+  const { id } = useParams()
+  const [params] = useSearchParams()
+  const resumeId = Number(id)
+  if (!Number.isInteger(resumeId) || resumeId <= 0) return <Navigate to="/dashboard" replace />
+  if (profile.isPending || !profile.data) return <Skeleton lines={3} />
+  return (
+    <Interview
+      profile={profile.data}
+      mode={asMode(params.get('mode'))}
+      kind={asKind(params.get('kind'))}
+      domain={asDomain(params.get('domain'))}
+      resumeId={resumeId}
+      onExit={() => void invalidate().then(() => navigate('/dashboard'))}
+    />
   )
 }

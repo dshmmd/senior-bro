@@ -1,14 +1,10 @@
-import { useEffect, useState } from 'react'
-import {
-  api,
-  type InterviewDomain,
-  type InterviewSummary,
-  type Profile,
-  type ProfileListItem,
-  type Weakness,
-} from '../api'
+import { useState } from 'react'
+import { api, type InterviewDomain, type Profile } from '../api'
 import { voiceSupported } from '../voice'
-import { ReportView } from './Report'
+import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/Confirm'
+import { useInterviews, useProfiles, useWeaknesses } from '../queries'
+import { useQueryClient } from '@tanstack/react-query'
 
 const fmtTokens = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`)
 
@@ -22,6 +18,7 @@ export function Dashboard({
   firstImpressionsLimit,
   onStartInterview,
   onResumeInterview,
+  onOpenReport,
   onNewProfile,
   onProfileSwitched,
   onRecalibrate,
@@ -43,6 +40,7 @@ export function Dashboard({
     weaknessId?: number,
   ) => void
   onResumeInterview: (id: number, mode: 'voice' | 'text', kind: 'full' | 'coaching') => void
+  onOpenReport: (id: number) => void
   onNewProfile: () => void
   onProfileSwitched: () => void
   onRecalibrate: () => void
@@ -50,39 +48,24 @@ export function Dashboard({
   onOpenCareer: () => void
   onOpenStudyPlan: () => void
 }) {
-  const [history, setHistory] = useState<InterviewSummary[]>([])
-  const [weaknesses, setWeaknesses] = useState<Weakness[]>([])
-  const [profiles, setProfiles] = useState<ProfileListItem[]>([])
-  const [openReport, setOpenReport] = useState<number | null>(null)
+  const toast = useToast()
+  const confirm = useConfirm()
+  const qc = useQueryClient()
+  const interviews = useInterviews()
+  const weaknessesQ = useWeaknesses()
+  const profilesQ = useProfiles()
   // Which interview domain the Start cards launch (R33 / D22).
   const [domain, setDomain] = useState<InterviewDomain>('technical')
   const canVoice = voiceSupported()
 
-  const reloadHistory = () =>
-    api
-      .listInterviews()
-      .then(setHistory)
-      .catch(() => undefined)
-
-  useEffect(() => {
-    void reloadHistory()
-    api
-      .listWeaknesses()
-      .then(setWeaknesses)
-      .catch(() => undefined)
-    api
-      .listProfiles()
-      .then((r) => setProfiles(r.profiles))
-      .catch(() => undefined)
-  }, [])
+  const history = interviews.data ?? []
+  const weaknesses = weaknessesQ.data ?? []
+  const profiles = profilesQ.data?.profiles ?? []
 
   // R24: switch which target role/profile the user is working in.
   const switchProfile = (id: number) => {
     if (id === profile.id) return
-    void api
-      .selectProfile(id)
-      .then(onProfileSwitched)
-      .catch(() => undefined)
+    api.selectProfile(id).then(onProfileSwitched).catch(toast.error)
   }
 
   const open = weaknesses.filter((w) => w.status !== 'resolved')
@@ -94,30 +77,29 @@ export function Dashboard({
   const returning = history.length > 0
 
   const discard = (id: number) => {
-    void api
+    api
       .abandonInterview(id)
-      .then(reloadHistory)
-      .catch(() => undefined)
+      .then(() => qc.invalidateQueries({ queryKey: ['interviews'] }))
+      .catch(toast.error)
   }
 
   // R36: delete a position + all its history. Frees a free-tier "first impression" slot (R32).
-  const deleteProfile = (id: number, label: string) => {
-    if (
-      !window.confirm(
-        `Delete "${label}" and all of its interviews, weaknesses and progress? This can't be undone, but it frees a free-tier slot.`,
-      )
-    )
-      return
-    void api
+  const deleteProfile = async (id: number, label: string) => {
+    const ok = await confirm({
+      title: `Delete "${label}"?`,
+      body: "All of its interviews, weaknesses and progress go with it. This can't be undone, but it frees a free-tier slot.",
+      confirmLabel: 'Delete position',
+      danger: true,
+    })
+    if (!ok) return
+    api
       .deleteProfile(id)
       .then(() => {
-        setProfiles((ps) => ps.filter((p) => p.id !== id))
+        toast.success(`Deleted "${label}"`)
         onProfileSwitched()
       })
-      .catch(() => undefined)
+      .catch(toast.error)
   }
-
-  if (openReport !== null) return <ReportView interviewId={openReport} onBack={() => setOpenReport(null)} />
 
   return (
     <>
@@ -146,7 +128,7 @@ export function Dashboard({
                 className="ghost"
                 title="Delete this position and its history"
                 aria-label={`Delete ${p.role}`}
-                onClick={() => deleteProfile(p.id, p.role)}
+                onClick={() => void deleteProfile(p.id, p.role)}
                 style={{ padding: '2px 6px' }}
               >
                 ✕
@@ -350,9 +332,10 @@ export function Dashboard({
                 <button
                   className="secondary"
                   onClick={() => {
-                    void api
+                    api
                       .setWeaknessStatus(w.id, 'resolved')
-                      .then(() => api.listWeaknesses().then(setWeaknesses))
+                      .then(() => qc.invalidateQueries({ queryKey: ['weaknesses'] }))
+                      .catch(toast.error)
                   }}
                 >
                   Mark resolved
@@ -384,7 +367,7 @@ export function Dashboard({
                     key={h.id}
                     className="clickable"
                     onClick={() =>
-                      h.status === 'finished' ? setOpenReport(h.id) : onResumeInterview(h.id, h.mode, h.kind)
+                      h.status === 'finished' ? onOpenReport(h.id) : onResumeInterview(h.id, h.mode, h.kind)
                     }
                   >
                     <td>{h.id}</td>

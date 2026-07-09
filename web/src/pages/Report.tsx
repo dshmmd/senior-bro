@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { type InterviewReport } from '../api'
+import { api, type InterviewReport } from '../api'
+import { useToast } from '../components/Toast'
 
 export function ReportCard({ report }: { report: InterviewReport }) {
   return (
@@ -66,18 +67,20 @@ export function ReportCard({ report }: { report: InterviewReport }) {
 }
 
 export function ReportView({ interviewId, onBack }: { interviewId: number; onBack: () => void }) {
+  const toast = useToast()
   const [report, setReport] = useState<InterviewReport | null>(null)
   const [transcript, setTranscript] = useState<{ role: string; content: string }[]>([])
   const [showTranscript, setShowTranscript] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/interviews/${interviewId}`)
-      .then((r) => r.json())
-      .then((d: { report: InterviewReport | null; transcript: { role: string; content: string }[] }) => {
+    api
+      .getInterview(interviewId)
+      .then((d) => {
         setReport(d.report)
         setTranscript(d.transcript)
       })
-      .catch(() => undefined)
+      .catch(toast.error)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interviewId])
 
   if (!report) return <div className="card msg thinking">Loading report…</div>

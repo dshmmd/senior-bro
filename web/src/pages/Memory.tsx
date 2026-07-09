@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type UserModelInfo } from '../api'
+import { useConfirm } from '../components/Confirm'
 
 /** A friendly label + icon for each event kind in the activity timeline. */
 const EVENT_META: Record<string, { icon: string; label: string }> = {
@@ -16,6 +17,7 @@ const EVENT_META: Record<string, { icon: string; label: string }> = {
  * so the personalization is transparent and auditable.
  */
 export function Memory({ onBack }: { onBack: () => void }) {
+  const confirm = useConfirm()
   const [data, setData] = useState<UserModelInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState('')
@@ -53,8 +55,13 @@ export function Memory({ onBack }: { onBack: () => void }) {
   }
 
   const clear = async () => {
-    if (!window.confirm('Forget everything we know about you for this profile? This cannot be undone.'))
-      return
+    const ok = await confirm({
+      title: 'Forget everything we know about you?',
+      body: 'The learner model for this profile is deleted and personalization starts over. This cannot be undone.',
+      confirmLabel: 'Forget it all',
+      danger: true,
+    })
+    if (!ok) return
     setBusy(true)
     setError('')
     try {
