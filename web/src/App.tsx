@@ -20,6 +20,7 @@ import { queryClient, useHealth, useInvalidateSession, useProfile } from './quer
 import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/Confirm'
 import { Skeleton } from './components/Skeleton'
+import { Icon } from './components/Icon'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Admin } from './pages/Admin'
@@ -225,32 +226,36 @@ function Shell() {
         )}
         {hosted && (
           <button className="pill clickable" onClick={() => void navigate('/plan')}>
-            💳 plan
+            <Icon name="wallet" size={13} /> Plan
           </button>
         )}
         {p?.level && (
           <button className="pill clickable" onClick={() => void navigate('/memory')}>
-            🧠 you
+            <Icon name="brain" size={13} /> You
           </button>
         )}
         {h?.user?.role === 'admin' && (
           <button className="pill clickable" onClick={() => void navigate('/admin')}>
-            🛠️ admin
+            <Icon name="tools" size={13} /> Admin
           </button>
         )}
         <button className="pill clickable" onClick={() => void navigate('/setup')}>
-          ⚙ settings
+          <Icon name="gear" size={13} /> Settings
         </button>
         {hosted && (
-          <button className="pill clickable" onClick={() => void logout()}>
-            {h.user?.email ? `↩ ${h.user.email}` : '↩ sign out'}
+          <button
+            className="pill clickable"
+            title={h.user?.email ? `Signed in as ${h.user.email}` : undefined}
+            onClick={() => void logout()}
+          >
+            <Icon name="exit" size={13} /> {h.user?.email ?? 'Sign out'}
           </button>
         )}
       </div>
       <div className="shell">
         {p?.level && backable && (
           <button className="ghost" onClick={() => void navigate('/dashboard')}>
-            ← Back
+            <Icon name="back" size={13} /> Back
           </button>
         )}
         <Outlet />

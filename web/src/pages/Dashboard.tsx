@@ -3,6 +3,7 @@ import { api, type InterviewDomain, type Profile } from '../api'
 import { voiceSupported } from '../voice'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/Confirm'
+import { NavCard } from '../components/Card'
 import { useInterviews, useProfiles, useWeaknesses } from '../queries'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -113,7 +114,7 @@ export function Dashboard({
 
       {profiles.length > 1 && (
         <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: 'var(--muted)', fontSize: 13 }}>Profiles:</span>
+          <span className="muted fs-sm">Profiles:</span>
           {profiles.map((p) => (
             <span key={p.id} className="row" style={{ gap: 2, alignItems: 'center' }}>
               <button
@@ -146,7 +147,7 @@ export function Dashboard({
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <b>⏸️ You have an interview in progress</b>
-              <div style={{ color: 'var(--muted)', fontSize: 14 }}>
+              <div className="muted fs-md">
                 {resumable.kind === 'coaching' ? 'Coaching drill' : 'Mock interview'} · {resumable.mode} ·{' '}
                 {resumable.turns} turn{resumable.turns === 1 ? '' : 's'} · started{' '}
                 {resumable.created_at.slice(0, 16)}. Pick up exactly where you left off.
@@ -164,50 +165,33 @@ export function Dashboard({
         </div>
       )}
 
-      <div className="card clickable" onClick={onOpenProgress} style={{ borderColor: 'var(--accent)' }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <b>🌌 Your constellation</b>
-            <div style={{ color: 'var(--muted)', fontSize: 14 }}>
-              Light up every skill, heal your weaknesses, earn medals — track it all here.
-            </div>
-          </div>
-          <span style={{ fontSize: 22 }}>→</span>
-        </div>
-      </div>
+      <NavCard
+        accent
+        title="🌌 Your constellation"
+        hint="Light up every skill, heal your weaknesses, earn medals — track it all here."
+        onClick={onOpenProgress}
+      />
 
       {/* Phase 7: post-interview study plan from the user's demonstrated gaps. */}
       {history.some((h) => h.status === 'finished') && (
-        <div className="card clickable" onClick={onOpenStudyPlan}>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <b>📚 Study plan</b>
-              <div style={{ color: 'var(--muted)', fontSize: 14 }}>
-                A prioritized plan from your gaps — drill each straight from the list.
-              </div>
-            </div>
-            <span style={{ fontSize: 22 }}>→</span>
-          </div>
-        </div>
+        <NavCard
+          title="📚 Study plan"
+          hint="A prioritized plan from your gaps — drill each straight from the list."
+          onClick={onOpenStudyPlan}
+        />
       )}
 
       {/* Phase 5: résumé boost + job matches driven by interview evidence. */}
-      <div className="card clickable" onClick={onOpenCareer}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <b>🚀 Career tools</b>
-            <div style={{ color: 'var(--muted)', fontSize: 14 }}>
-              Boost your résumé from what you&apos;ve proven, and find matched job openings to target.
-            </div>
-          </div>
-          <span style={{ fontSize: 22 }}>→</span>
-        </div>
-      </div>
+      <NavCard
+        title="🚀 Career tools"
+        hint="Boost your résumé from what you've proven, and find matched job openings to target."
+        onClick={onOpenCareer}
+      />
 
       {claims.length > 0 && (
         <div className="card">
           <b>Your skills — shown vs. claimed</b>
-          <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>
+          <div className="muted fs-sm" style={{ marginTop: 2 }}>
             We only count a skill once you&apos;ve proven it in an interview — not just listed it.
           </div>
           <div className="row" style={{ flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
@@ -240,7 +224,7 @@ export function Dashboard({
           <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <b>{interviewReady ? '✅ Ready to interview' : '💳 Interviews are metered'}</b>
-              <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>
+              <div className="muted fs-sm" style={{ marginTop: 2 }}>
                 Your{' '}
                 <b>
                   {firstImpressionsUsed}/{firstImpressionsLimit}
@@ -262,13 +246,13 @@ export function Dashboard({
 
       <h2>Start a mock interview</h2>
       {hosted && !interviewReady && (
-        <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>
+        <p className="muted fs-sm" style={{ marginTop: 0 }}>
           Starting an interview will open the model chooser (add balance + pick your interviewer).
         </p>
       )}
       {/* R33 / D22: pick the interview domain; the cards below launch it in that domain. */}
       <div className="row" style={{ gap: 8, marginBottom: 4, alignItems: 'center' }}>
-        <span style={{ color: 'var(--muted)', fontSize: 13 }}>Kind:</span>
+        <span className="muted fs-sm">Kind:</span>
         <button className={domain === 'technical' ? '' : 'secondary'} onClick={() => setDomain('technical')}>
           🧠 Technical
         </button>
@@ -276,7 +260,7 @@ export function Dashboard({
           🤝 HR / Behavioral
         </button>
       </div>
-      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>
+      <p className="muted fs-sm" style={{ marginTop: 0 }}>
         {domain === 'hr'
           ? 'Culture fit, motivation, teamwork and conflict — STAR-style behavioral questions.'
           : 'Coding depth, system design and technical trade-offs, calibrated to your level.'}
@@ -288,7 +272,7 @@ export function Dashboard({
           onClick={() => canVoice && onStartInterview('voice', 'full', domain)}
         >
           <b>🎙️ Voice interview</b>
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
+          <p className="muted fs-md">
             {canVoice
               ? 'Talk out loud like the real thing. The interviewer speaks back.'
               : 'Not supported in this browser — try Chrome, Edge, or Safari.'}
@@ -300,9 +284,7 @@ export function Dashboard({
           onClick={() => onStartInterview('text', 'full', domain)}
         >
           <b>⌨️ Text interview</b>
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-            Classic chat format. Good for code-heavy answers.
-          </p>
+          <p className="muted fs-md">Classic chat format. Good for code-heavy answers.</p>
         </div>
       </div>
 
@@ -315,7 +297,7 @@ export function Dashboard({
                 <b>{w.title}</b>
                 <span className={`badge ${w.status}`}>{w.status}</span>
               </div>
-              <p style={{ color: 'var(--muted)', fontSize: 14 }}>{w.detail}</p>
+              <p className="muted fs-md">{w.detail}</p>
               {w.fix && <p style={{ fontSize: 14 }}>💡 {w.fix}</p>}
               <div className="row">
                 <button onClick={() => onStartInterview('text', 'coaching', 'technical', w.id)}>

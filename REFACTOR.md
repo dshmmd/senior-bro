@@ -250,18 +250,24 @@ Fixes W1, W3, W4. This is the enabler for every P1 UX epic.
 
 #### RF-6 · Design system + component library — L
 Fixes W2, W7. Prerequisite for RF-7/RF-8.
-- [ ] `web/src/components/`: `Card`, `Button`, `Badge`, `Pill`, `Modal`,
-      `Toast`, `Skeleton`, `EmptyState`, `Stat`, `ProgressBar`, `Tabs`,
-      `DataTable`, `Field` (label+input+error). Design tokens (spacing, type
-      scale, semantic colors) as CSS variables extending the existing dark palette.
-- [ ] Replace inline `style={{…}}` across pages with components/utility classes;
-      replace emoji-as-icons with a small inline SVG icon set (emoji stay only
-      where they're *content*, e.g. medals).
-- [ ] Accessibility pass while touching everything: topbar pills become real
-      `<button>`/`<a>`, focus-visible styles, aria labels, contrast check,
-      `prefers-reduced-motion` respected in the app shell.
+- [x] **Slice 1 (2026-07-09):** design tokens in `styles.css` (spacing/type/radius
+      scales + comment documenting the `[data-theme]` per-locale override seam for
+      the future FA theme) + utility classes (`.muted`, `.fs-*`, `.between`)
+      replacing the most-repeated inline styles. Components: `Icon` (inline SVG
+      set — wallet/brain/tools/gear/exit/back/arrow/mic/chat), `Card`/`NavCard`
+      (keyboard-accessible whole-card button with arrow affordance — replaced the
+      `div.card.clickable` pattern on Dashboard), `PageHeader`/`EmptyState`, plus
+      RF-5's `Toast`/`Confirm`/`Skeleton`. Topbar de-emojified: real buttons with
+      SVG icons + text labels ("Plan/You/Admin/Settings/sign-out"). A11y basics:
+      global `:focus-visible` ring, aria-labels on icon-only buttons,
+      reduced-motion honored for shimmer/toasts. Verified in-browser (screenshots)
+      + `make check`/`make e2e` green.
+- [ ] Slice 2: adopt the components across the remaining pages (Interview via
+      RF-10, Admin via RF-9, Plan/Career/Study/Memory/Setup/ProfileSetup/
+      Calibration), `Field` (label+input+error) + `DataTable`/`Tabs` extraction,
+      full contrast/axe audit.
 - **Gate:** visual parity-or-better screenshots per page; e2e green; axe scan of
-  main pages has no serious violations.
+  main pages has no serious violations. ✔ slice 1 (dashboard + shell).
 
 #### RF-7 · Plain-language & onboarding/UX rewrite — M
 Fixes W5. The vision's "no AI/software knowledge required" epic.
