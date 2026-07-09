@@ -165,6 +165,11 @@ One entry per completed milestone. Read this before working on the repo.
   TanStack Query + toasts/confirm/skeletons, `e2e/urls.spec.ts`, Playwright workers:1). Owner
   decisions: interview-bundle pricing, single-locale deploys (EN/FA), adaptive celebrations,
   Admin v2 right after design system. Next = **RF-6** then **RF-9**.
+- [2026-07-09 — RF-6 slice 1 + RF-9: design system + Admin v2](2026-07-09-rf6-rf9-design-system-admin-v2.md) —
+  tokens/Icon/NavCard/a11y (slice 2 pending); Admin v2 done: migration 0013 (suspended, admin_events,
+  feature kill switch), per-event usage audit, `verify-admin-v2.mjs`; Admin.tsx → 9 routed pages with
+  prompt diff/compare, CSV export, suspend, inline quota. Feature assignments now `{model_id, disabled}`.
+  Next = **RF-7** (plain language + onboarding + landing), then RF-8, RF-10.
 - [2026-07-09 — RF-1 + RF-2 slice 1](2026-07-09-rf1-rf2-slice1.md) — owner answered all REFACTOR.md
   §6 decisions (interview-bundle pricing, single-locale EN/FA deploys, adaptive celebration, Admin v2
   early). RF-1 ✅ (dirty tree committed `7a30765`+`9d1e04d`; CLAUDE.md rule 3a). RF-2 slice 1 ✅:
