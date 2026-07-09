@@ -24,6 +24,7 @@
     "start": "node server/dist/index.js",
     "smoke": "node scripts/smoke.mjs",
     "test:guardrail": "node --test 'server/test/*.test.mjs'",
+    "test:integration": "node --test 'server/test/integration/*.test.mjs'",
     "e2e": "node e2e/prepare.mjs && playwright test"
   },
   "devDependencies": {

@@ -38,6 +38,7 @@ jobs:
       - run: npm run build
       - run: npm run test:guardrail
       - run: npm run smoke
+      - run: npm run test:integration
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       - run: npm run e2e

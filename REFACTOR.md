@@ -158,20 +158,25 @@ Fixes W13.
 
 #### RF-2 · Promote the verify scripts into a CI integration suite — L
 Fixes W9. **Do this before touching server code** — it's the safety net for RF-3/RF-4.
-- [ ] Create `server/test/integration/` on `node --test`, reusing the existing
-      `e2e/prepare.mjs` isolated-DB pattern (boot the built server against
-      `senior_bro_test`, hosted mode, mock provider).
-- [ ] Port each `scripts/verify-ph*.mjs` + `verify-model-readiness.mjs` +
-      `verify-admin-entitlement.mjs` into named, focused test files:
+- [x] **Slice 1 (2026-07-09): all 12 verify scripts now run in CI.**
+      `server/test/integration/verify-scripts.test.mjs` executes every
+      `scripts/verify-*.mjs` sequentially under `node --test` against an isolated
+      `senior_bro_itest` DB (wiped between scripts); ph13 (pre-self-boot pattern)
+      gets its hosted server booted by the runner. Wired as `npm run
+      test:integration` / `make test-integration`, added to **`make check`** and
+      the CI workflow. Full suite ≈ 24s. Sabotage-tested: flipping
+      `FREE_IMPRESSION_LIMIT` 3→4 fails 3 tests.
+- [ ] Slice 2 (incremental, can interleave with RF-3): port each script into
+      named, focused test files under `server/test/integration/` —
       `entitlement.test.mjs` (free-impression accounting, 402s, admin exemption),
       `feature-routing.test.mjs`, `profiles.test.mjs` (multi-profile, delete
       cascade, cross-user 404), `onboarding.test.mjs` (CV flow), `domains.test.mjs`,
-      `career.test.mjs`, `study-plan.test.mjs`, `voice.test.mjs`.
-- [ ] Wire into `make test` + CI (job can share the existing Postgres service).
-      Keep the original scripts until their ports are proven, then delete them.
+      `career.test.mjs`, `study-plan.test.mjs`, `voice.test.mjs` — with a shared
+      boot/signin harness. Delete a script only once its port is proven; remove it
+      from `SCRIPTS` in `verify-scripts.test.mjs` at the same time.
 - [ ] Add coverage reporting (c8) so gaps are visible; no hard threshold yet.
-- **Gate:** CI runs the full suite in reasonable time; a deliberately broken
-  entitlement check fails CI.
+- **Gate (met for slice 1):** CI runs the full suite in reasonable time; a
+  deliberately broken entitlement check fails CI. ✔ proven 2026-07-09.
 
 #### RF-3 · Break up the server monolith — L
 Fixes W8. Pure move-and-split; RF-2's suite proves nothing broke.

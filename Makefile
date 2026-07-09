@@ -48,10 +48,13 @@ smoke: db-up ## boot built server (needs Postgres) and verify key endpoints
 test: ## red-team guardrail unit tests (needs a prior build)
 	npm run test:guardrail
 
+test-integration: db-up ## behavioral integration suite (RF-2): scripts/verify-*.mjs on an isolated DB
+	npm run test:integration
+
 e2e: db-up ## playwright happy-path against the built app (mock provider, isolated test DB)
 	npm run e2e
 
-check: lint typecheck build test smoke ## full verification gate (run before any commit; needs Docker)
+check: lint typecheck build test smoke test-integration ## full verification gate (run before any commit; needs Docker)
 
 clean: ## remove build artifacts and node_modules
 	rm -rf node_modules server/node_modules web/node_modules server/dist web/dist
