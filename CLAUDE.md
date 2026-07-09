@@ -55,10 +55,17 @@ via the local CLI (free, local only)** — see plans in ROADMAP D11.
 > **The owner-authorized 5 → 7 → 4 track is fully shipped.** Next work is the owner's call — remaining
 > queued items are the infra track R26–R30 (admin UX, NL-store D18, k8s deploy, Prometheus/Grafana, STT).
 
+> **2026-07-09 owner directive: refactor before new features.** A comprehensive,
+> prioritized refactor plan lives in **`REFACTOR.md`** (UI/UX overhaul for a
+> non-technical audience, admin console v2, server modularization, promoting the
+> verify scripts into a CI test suite). Until it's marked closed, take refactor
+> epics (P0 order first) before any new ROADMAP feature unless the owner says otherwise.
+
 ## ▶ START HERE — when the owner says "continue"
 
 Do this, in order, before writing any code. It rebuilds full context in ~1 min:
 
+0. Read **`REFACTOR.md`** — if it's still open, the next work item comes from there.
 1. Read **`ROADMAP.md`** top-to-bottom — it has the vision, the decisions
    (D1–D15), open questions, the phase checklist (Phases 0–16), and the owner-directed
    build order. Phases 11–16 are the current owner-directed scope.
@@ -90,6 +97,10 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 3. Verification gate before any commit: `make check` (lint + typecheck + build + smoke).
    Run `make e2e` too when a UI flow changed. **`make check` needs Docker/Postgres up**
    (the `make` targets run `db-up` first; `make db-up` starts the container).
+3a. **Branch hygiene (RF-1, 2026-07-09):** never leave `main` dirty at a gate — shipped
+   work gets committed (and pushed) the same session it's verified. Refactor epics
+   (REFACTOR.md) happen on short-lived branches merged to `main` when green; small
+   verified fixes may land directly on `main`.
 4. One language everywhere: TypeScript. Server data lives in **PostgreSQL (Docker)** via
    **Drizzle ORM** (`server/src/schema.ts` + generated `server/drizzle/` migrations); db
    queries are async. Deps that buy real robustness are fine (D9 retired the zero-deps rule
@@ -196,11 +207,19 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
 - [ ] R29: **Observability — Prometheus + Grafana on Arvan** — expose app/runtime/usage metrics
   (`/metrics`), run Prometheus + Grafana in the cluster, ship dashboards (token burn, cost, latency,
   errors, active users). Follows R28. (Phase 22)
-- [ ] R30: **Accent-aware voice via server-side STT** — upgrade beyond browser Web Speech STT by
+- [x] R30: **Accent-aware voice via server-side STT** — upgrade beyond browser Web Speech STT by
   transcribing the candidate's audio on our server through an OpenAI-compatible gateway's transcription
-  endpoint (**AvalAI** `/v1/audio/transcriptions`, Whisper/`gpt-4o-transcribe`) → editable transcript →
-  any chat model. Model-agnostic; native audio-in (gpt-4o-audio/Gemini) stays a later, passthrough-gated
-  option. **Owner deciding the provider — build deferred until they confirm.** (D20, refines D17)
+  endpoint → editable transcript → any chat model. Model-agnostic; native audio-in (gpt-4o-audio/Gemini)
+  stays a later, passthrough-gated option. Shipped 2026-07-02 on **ArvanCloud** (owner tested +
+  confirmed GPT-4o-Transcribe, not AvalAI): `providers.ts` `transcribe()` (OpenAI-compatible
+  `/audio/transcriptions`, arvan + openai); new `voice.transcribe` feature (R35) — an admin must
+  explicitly assign it (never falls back to a chat model, which can't transcribe); `POST
+  /api/voice/transcribe` + `GET /api/voice/available` (entitlement-gated like an interview turn);
+  web `Recorder` (MediaRecorder) upgrades the mic button when available, else falls back to the
+  existing browser-STT `Listener` unchanged. Also fixed a real bug found while shipping this:
+  `validateKey`'s admin "Add model" probe only tried chat completions, which always fails for a
+  transcription-only model — it now falls back to a silent-audio probe. Verified live end-to-end
+  against a real Arvan account (real speech in → correct transcript out → metered). (D19/D20, refines D17)
 
 ### Owner additions 2026-07-02 (R31–R36) — CV onboarding, first-impression free tier, interview kinds
 - [x] R31: **CV-first onboarding** — upload a resume (PDF/text); LLM extracts job target, company,
@@ -240,6 +259,33 @@ Current status is always the bottom-most ✅ phase in `ROADMAP.md`.
   a user frees up a burned first-impression slot (R32) without it auto-resetting. Shipped 2026-07-02:
   `DELETE /api/profiles/:id` (owned; 404 cross-user), `db.deleteProfile`, Dashboard per-profile ✕ with
   confirm; `active_profile_id` FK nulls out → falls back to latest. (Phase 23)
+
+### Owner additions 2026-07-02, later batch (R37–)
+- [x] R37: **Model choice shows price AND capability** — the user-facing model pickers (Setup + the
+  Plan/interview-start chooser) now show the D3 capability tier next to provider/model/price, so the
+  choice is quality-vs-cost informed. Shipped 2026-07-03 alongside the onboarding redesign below. (D3)
+- [x] R39: **BYOK retired + model choice moved to interview-start (hosted onboarding redesign)** —
+  Shipped 2026-07-03. Removed "Bring your own API key" from Setup + Plan (BYOK plan machinery stays in
+  the server for now but is unreachable from the UI). **Admins are staff — un-metered:**
+  `enforceEntitlement` + `/health.interview_ready` exempt `role==='admin'` (they run every feature on
+  the default model, never paywalled by the free-impression/credit gates). Résumé onboarding errors
+  now render in the résumé card, not just the form below (locked by `scripts/verify-admin-entitlement.mjs`).
+  Demo models load via `scripts/seed-demo-models.mjs` + an untracked `.demo-models.json`. Hosted
+  onboarding no longer forces a provider/
+  model gate: login → profile → calibration (free) → dashboard. The **brain model is chosen at
+  interview-start** — starting an interview when not entitled routes to the reworked Plan page
+  ("Set up your interviews": add balance → pick model, price+capability shown). Dashboard shows a
+  cost-clarity card (N/3 free first impressions vs. metered interviews; audio/transcription always
+  included). Root-cause bug fixed: `/health` now returns `interview_ready` (+ `credit_left`,
+  `first_impressions_*`) that **counts a selected host model**, not just the user's own key — the old
+  gate ignored `has_model`, so picking a provided model looked like "nothing configured" and bounced
+  the user back to setup. Regression-locked by `scripts/verify-model-readiness.mjs`; `make check` +
+  `make e2e` green; live hosted flow verified in-browser. (extends D11 · redefines Phase 13 onboarding)
+- [ ] R38: **Product metrics + feature-rollout dashboards** — alongside infra observability
+  (R29/Phase 22), define product/business metrics (interview start→finish completion rate,
+  token burn, cost/income, per-feature adoption, more to be defined), store them queryably
+  (extends the D2 `user_events` log with an aggregate layer, not just per-profile reads), and
+  build dashboards so a feature's effect after rollout is measurable. (D24 · extends Phase 22/R29)
 
 ## Architecture
 

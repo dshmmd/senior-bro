@@ -129,3 +129,28 @@ One entry per completed milestone. Read this before working on the repo.
   per-tier "MODEL NOTE" into the interview/HR/coaching brief. Surfaced in /config, /usage, admin
   models. Verified by `scripts/verify-ph4-d3.mjs` + `capability.test.mjs`. **Finishes the 5→7→4
   track; all three shipped.** Next = owner's call (infra R26–R30 remain).
+- [2026-07-02 — R30: server-side transcription (GPT-4o-Transcribe/Arvan)](2026-07-02-r30-server-side-transcription.md) —
+  `providers.ts` `transcribe()` (OpenAI-compatible `/audio/transcriptions`, arvan+openai); new
+  `voice.transcribe` feature (R35) that never falls back to a chat model; `POST
+  /api/voice/transcribe` + `GET /api/voice/available`; web `Recorder` upgrades the mic when
+  configured, else falls back to browser STT unchanged. Fixed a real bug: admin "Add model"
+  validation only tried chat completions, always failing for transcription-only models. Verified
+  live against the owner's real Arvan account. Next = owner's call (R26–R29 remain).
+- [2026-07-03 — Hosted onboarding redesign + model-readiness bug (R37/R39)](2026-07-03-hosted-onboarding-redesign.md) —
+  Root cause: the client gate read `health.configured` (own key only), ignoring a *selected provided
+  model*, so picking a website model bounced back to setup. Fixed via `/health.interview_ready`
+  (counts `has_model`), locked by `scripts/verify-model-readiness.mjs`. Redesign: BYOK removed from the
+  UI, no model gate during onboarding, brain-model chosen at interview-start (reworked Plan page with
+  price+capability), Dashboard cost-clarity card (N/3 free first impressions). Verified live in hosted
+  mode. Follow-up: landing page still markets BYOK.
+- [2026-07-03 — Admin is staff (un-metered) + résumé errors surfaced](2026-07-03-admin-entitlement-and-resume-errors.md) —
+  Admin was paywalled like a free-intro user (`interview_ready:false`); now `enforceEntitlement` +
+  `/health` exempt `role==='admin'` (runs un-metered on the default model). Résumé extraction errors
+  now render in the résumé card, not just the form below. Locked by `scripts/verify-admin-entitlement.mjs`.
+  Demo models: `scripts/seed-demo-models.mjs` + untracked `.demo-models.json` (Arvan was unreachable
+  from the shell at fix time — couldn't add live).
+- [2026-07-09 — Refactor plan created](2026-07-09-refactor-plan.md) — docs-only. Owner directive:
+  refactor before new features. **`REFACTOR.md`** = self-contained prioritized plan (epics RF-1…RF-15,
+  P0/P1/P2): commit in-flight work → verify-scripts→CI suite → server split → shared API types → web
+  router/query/error surface → design system → plain-language UX → dopamine loop → Admin v2 → hardening.
+  CLAUDE.md/ROADMAP now point to it. Next = **RF-1** (commit the dirty tree).

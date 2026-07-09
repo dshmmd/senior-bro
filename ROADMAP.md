@@ -1,5 +1,10 @@
 # Senior Bro — Product Roadmap
 
+> **2026-07-09: a prioritized refactor plan is open in `REFACTOR.md`** (owner
+> directive: refactor before new features — UI/UX, admin console v2, server
+> modularization, CI test promotion). Work it first; this file stays the feature
+> roadmap + decision log.
+
 > **This is the persistent plan.** Any Claude session continuing this product:
 > read this file + `memory/INDEX.md` first, work the lowest unfinished phase,
 > mark items `[x]` as they land, and append a memory entry per milestone.
@@ -54,6 +59,7 @@ card — for testers, partners, and early users. See D11.
 | D21 | **Free tier = one shared "first impression" credit, 3 per verified user** (2026-07-02, redefines D11/R18's "free level-check for everyone"): resume-check, company/target-knowledge lookup-or-generation, first-knowledge-build (user-model bootstrap), and calibration all draw from **one shared lifetime counter of 3** per email-verified user. Touching any one of them — even partially, even if the user doesn't finish it — burns 1 of the 3; it's not 1-free-use-per-action-type. After 3, those actions require a plan (host pay-as-you-go credit / BYOK / local CLI), same gate full interviews & weakness-drilling already sit behind (unchanged). | Owner: these are all "first impression" actions on the same free budget, not independent unlimited freebies — caps host-token spend on exploration while still letting a curious user meaningfully try the product before paying |
 | D22 | **Interview "domain" is a first-class, extensible dimension** (2026-07-02, answers the technical+HR ask; renamed from an earlier "kind" wording because `interviews.kind` already means `full`/`coaching` in the schema — this is a **separate** column): interviews carry a domain (starts with `technical`, `hr`); each domain has its own versioned system prompt key (rides the D12 prompt-versioning infra, e.g. `interview.technical.system` / `interview.hr.system`) and its own gamification constellation (extends D7/Phase 6). Adding a new domain later is a registry entry, not a code branch rewrite. A domain's constellation/dashboard section stays hidden until the user has evidence for it — no empty HR constellation for a user with zero HR interviews, and vice versa. | Owner wants HR interviews alongside technical, with room to add more kinds later without rearchitecting; per-domain prompts + per-domain constellations keep kinds independent so shipping a new one never risks the others |
 | D23 | **Admin assigns a model per feature/purpose, not one global default** (2026-07-02, answers "which model should power which action"): extend the admin model catalog (R13/Phase 9) with a **feature-key → model** mapping (mirrors the D12 `prompt_key` pattern) — e.g. `resume.parse`, `knowledge.first`, `calibration`, `company.pack`, `interview.technical`, `interview.hr`, `personalization.distill` — each resolves to an explicitly-assigned model or falls back to the single global default (today's `models.is_default`) when unset, so existing behavior needs zero admin action to keep working. | Owner wants cheap/fast models on cheap actions (resume parse, calibration) and stronger models where quality matters (interviews); one global default can't express that |
+| D24 | **Product/business metrics are a distinct layer from infra observability (R29) and the personalization event log (D2)** (2026-07-03, answers "how do we measure a feature's effect after rollout"): `user_events` (D2/Phase 4) already records lifecycle events (`interview_started`/`interview_finished`/…) but per-profile, feeding the LLM distiller — not built for aggregate funnels or dashboards. Prometheus/Grafana (R29/Phase 22) covers app/runtime health (latency, errors, uptime), not product behavior. Product metrics need their own **queryable, aggregable store** (start→finish funnels, token burn trends, cost/income, per-feature adoption) + dashboards a human reads to judge a rollout's effect. | Ops health and "did this feature work" are different questions with different audiences (SRE vs. product); conflating them into one system makes both worse — infra metrics need to stay real-time/cheap, product metrics need to stay queryable/historical |
 
 > **North star (owner, 2026-06-25):** "requirements are not god's words — use your
 > creativity; the goal is an *easy-to-use service for people who want to learn*, built to
@@ -126,9 +132,12 @@ card — for testers, partners, and early users. See D11.
 - 2026-07-02: **Phase 24 shipped in full** (R33 interview domains technical + HR via a new
   `domain` column + `server/src/domains.ts` registry + `interview.hr.system` prompt; R34 per-domain
   constellations hidden until evidence; R7/R23 + evaluation reused for HR). Verified by
-  `scripts/verify-ph24.mjs`; `make check` + `make e2e` green. **All owner-directed requirements
-  R1–R36 are now shipped except the deferred/queued ones (R26–R30 admin UX / NL-store / k8s /
-  metrics / server-side STT).** No phase is queued — **next work is the owner's call.**
+  `scripts/verify-ph24.mjs`; `make check` + `make e2e` green.
+- 2026-07-02: **R30 shipped** — server-side transcription via GPT-4o-Transcribe on ArvanCloud
+  (owner tested the live account and confirmed the model + credentials before build). See Phase 18
+  addendum below. **All owner-directed requirements R1–R36 are now shipped except R26–R29
+  (admin UX, NL-store D18, k8s deploy, Prometheus/Grafana).** No phase is queued — **next work is
+  the owner's call.**
 
 ---
 
@@ -275,6 +284,10 @@ here must be **configurable from the admin UI with no redeploy** ("configurable 
 - [x] **User-facing model picker driven by admin config**: users pick only from
       admin-enabled models (`GET /api/models`, `POST /api/models/select`); Setup shows
       "Use a provided model". No model/provider hardcoded in the client.
+- [ ] **R37: picker shows capability, not just price** (owner 2026-07-02) — the picker
+      today (`Setup.tsx`) shows each curated model's price but not its D3 capability tier
+      (fast/standard/deep) or any other capability signal; a user can't weigh quality vs.
+      cost. Surface capability next to price in the model-choice UI.
 - [x] Usage & limits console: per-user token burn + cost, set/adjust quotas
       (`GET /api/admin/users`, `POST /api/admin/users/:id/quota`). (Suspend-user still TODO.)
 - [ ] Manage skill packs (CRUD + publish) and feature flags / per-provider kill switches.
@@ -466,6 +479,23 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
       fallback covers cost. (Live confirmation that Arvan returns streamed `usage` is an owner-side check.)
 - [ ] Admin-visible **per-event** usage audit (who/when/model/in-out/cost) — folds into the Phase 19
       dashboard (today the admin sees per-user aggregates via `/api/admin/users`).
+- [x] **R30: server-side transcription (GPT-4o-Transcribe on Arvan)** ✅ shipped 2026-07-02. Owner
+      supplied real Arvan credentials + tested the raw endpoint (chat models + `/audio/transcriptions`)
+      before build. `providers.ts` `transcribe()` — OpenAI-compatible `/audio/transcriptions` shared by
+      `arvan`/`openai` (Arvan's transcription `usage` is shaped `input_tokens`/`output_tokens`, not
+      `prompt_tokens`/`completion_tokens` like chat — a genuinely different response shape, handled with
+      a zero-usage char-estimate fallback like chat). New `voice.transcribe` feature (R35) — deliberately
+      **not** on the generic `resolveCall` default-fallback path (a chat model can't serve
+      `/audio/transcriptions`); unassigned → `POST /api/voice/transcribe` returns 409 and the client
+      falls back to the existing browser-STT `Listener`, never erroring the user's mic. `GET
+      /api/voice/available` lets the client check first. Entitlement-gated like an interview turn (not
+      the free-intro budget, since it's used mid-interview). Web: new `Recorder` (MediaRecorder) in
+      `voice.ts`; `Interview.tsx` mic button uses it when available (record → upload → transcript lands
+      in the same editable box as browser dictation, D17 unchanged). **Bug fixed in passing:** admin "Add
+      model" `validateKey` only ever tried a chat-completion probe, which unconditionally fails for a
+      transcription-only model (confirmed against Arvan: 424 "no available channels ... chat/completions")
+      — it now falls back to a tiny silent-WAV transcription probe. Verified live end-to-end against the
+      owner's real Arvan account: real speech in → correct transcript out → metered (`make check` green).
 - **Gate: owner reviews.** Owner action: add an Arvan model in Admin (gateway URL + apikey + per-MTok prices).
 
 ### Phase 19 — Admin dashboard upgrade (R26)
@@ -490,6 +520,13 @@ Replaced `node:sqlite` with PostgreSQL run via Docker; one DB for local-dev + ho
 ### Phase 22 — Observability: Prometheus + Grafana on Arvan (R29)
 - [ ] `/metrics` endpoint (app + runtime + usage: token burn, cost, latency, errors, active users).
 - [ ] Prometheus + Grafana in the cluster; ship starter dashboards + alerts. Follows Phase 21.
+- [ ] **R38: Product metrics + feature-rollout dashboards** (owner 2026-07-03, D24) — distinct
+      from the infra metrics above and from the per-profile `user_events` log (D2/Phase 4):
+      define product/business metrics (interview start→finish completion rate, token burn,
+      cost/income, per-feature adoption, and more to be defined), store them queryably, and
+      build dashboards so a feature's measurable effect after rollout is visible — not just
+      whether the app is healthy. Likely reuses/extends `user_events` as the event source but
+      needs an aggregate query/dashboard layer on top, not just per-profile reads.
 
 ---
 
