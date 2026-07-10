@@ -179,3 +179,8 @@ One entry per completed milestone. Read this before working on the repo.
   early). RF-1 ✅ (dirty tree committed `7a30765`+`9d1e04d`; CLAUDE.md rule 3a). RF-2 slice 1 ✅:
   `server/test/integration/verify-scripts.test.mjs` runs all 12 verify scripts in `make check` + CI
   on an isolated `senior_bro_itest` DB (~24s, sabotage-proven). Next = **RF-2 slice 2 / RF-3**.
+- [2026-07-10 — Arvan production models live](2026-07-10-arvan-production-models.md) —
+  GLM-5.2 (arvan, Toman prices, default) + GPT-4o-Transcribe routed to `voice.transcribe`; both
+  live-tested end-to-end (real speech → correct transcript → metered); mocks deleted; secrets only in
+  untracked `.demo-models.json`. Code: price caps → deploy-currency, `CURRENCY` in strings.ts,
+  arvan-first admin form. Gotcha: manual verify-script runs hit the DEV db and flip kill switches.
