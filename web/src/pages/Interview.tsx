@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type InterviewDomain, type InterviewReport, type Profile } from '../api'
-import { Listener, Recorder, Speaker, recordingSupported, stopSpeaking } from '../voice'
+import { Listener, Recorder, Speaker, recordingSupported, stopSpeaking, toWav } from '../voice'
 import { Celebration, intensityForLevel } from '../components/Celebration'
 import { ReportCard } from './Report'
 
@@ -270,7 +270,9 @@ export function Interview({
         setTranscribing(true)
         try {
           const blob = await recorder.current.stop()
-          if (blob) appendDraft(await api.transcribeAudio(blob))
+          // Gateways reject WebM/MP4 recordings — convert to WAV in the browser first
+          // (fall back to the raw recording if this browser can't decode its own format).
+          if (blob) appendDraft(await api.transcribeAudio(await toWav(blob).catch(() => blob)))
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err))
         } finally {

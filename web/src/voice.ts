@@ -110,6 +110,61 @@ export class Recorder {
   }
 }
 
+/**
+ * Convert a MediaRecorder blob (WebM/Opus on Chrome, MP4/AAC on Safari) to 16-kHz mono
+ * 16-bit PCM WAV. Transcription gateways (Arvan's GPT-4o-Transcribe rejects WebM with
+ * "Audio file might be corrupted or unsupported") reliably accept WAV, and 16 kHz mono
+ * is all speech models need — it also shrinks the upload. Decode failures throw; the
+ * caller falls back to uploading the original blob.
+ */
+export async function toWav(blob: Blob): Promise<Blob> {
+  const raw = await blob.arrayBuffer()
+  const probe = new AudioContext()
+  let decoded: AudioBuffer
+  try {
+    decoded = await probe.decodeAudioData(raw)
+  } finally {
+    void probe.close()
+  }
+  const rate = 16000
+  const frames = Math.max(1, Math.ceil(decoded.duration * rate))
+  // OfflineAudioContext(1, …) downmixes to mono and resamples in one render pass.
+  const offline = new OfflineAudioContext(1, frames, rate)
+  const src = offline.createBufferSource()
+  src.buffer = decoded
+  src.connect(offline.destination)
+  src.start()
+  const rendered = await offline.startRendering()
+  return encodeWav16(rendered.getChannelData(0), rate)
+}
+
+/** Minimal RIFF/WAVE encoder: mono 16-bit PCM. */
+function encodeWav16(samples: Float32Array, rate: number): Blob {
+  const buf = new ArrayBuffer(44 + samples.length * 2)
+  const v = new DataView(buf)
+  const str = (off: number, s: string) => {
+    for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i))
+  }
+  str(0, 'RIFF')
+  v.setUint32(4, 36 + samples.length * 2, true)
+  str(8, 'WAVE')
+  str(12, 'fmt ')
+  v.setUint32(16, 16, true) // fmt chunk size
+  v.setUint16(20, 1, true) // PCM
+  v.setUint16(22, 1, true) // mono
+  v.setUint32(24, rate, true)
+  v.setUint32(28, rate * 2, true) // byte rate
+  v.setUint16(32, 2, true) // block align
+  v.setUint16(34, 16, true) // bits per sample
+  str(36, 'data')
+  v.setUint32(40, samples.length * 2, true)
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]!))
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+  }
+  return new Blob([buf], { type: 'audio/wav' })
+}
+
 function makeUtterance(text: string): SpeechSynthesisUtterance {
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.rate = 1.05

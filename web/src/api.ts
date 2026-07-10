@@ -211,7 +211,8 @@ export const api = {
   voiceAvailable: () => request<{ available: boolean }>('/voice/available'),
   transcribeAudio: async (audio: Blob): Promise<string> => {
     const fd = new FormData()
-    fd.append('file', audio, 'answer.webm')
+    const ext = audio.type.includes('wav') ? 'wav' : audio.type.includes('mp4') ? 'mp4' : 'webm'
+    fd.append('file', audio, `answer.${ext}`)
     const res = await fetch('/api/voice/transcribe', { method: 'POST', credentials: 'same-origin', body: fd })
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string }
