@@ -25,8 +25,9 @@ const modelCreateSchema = z
     apiKey: z.string().max(400).optional(),
     enabled: z.boolean().default(true),
     is_default: z.boolean().default(false),
-    price_in: z.number().min(0).max(10000).default(0),
-    price_out: z.number().min(0).max(10000).default(0),
+    // Price per 1M tokens in the DEPLOY'S currency (USD, Toman, …) — hence the loose cap.
+    price_in: z.number().min(0).max(100_000_000).default(0),
+    price_out: z.number().min(0).max(100_000_000).default(0),
   })
   .refine((v) => v.provider !== 'arvan' || (v.base_url?.length ?? 0) > 0, {
     message: 'Arvan models need a gateway base URL',
@@ -39,8 +40,8 @@ const modelUpdateSchema = z.object({
   apiKey: z.string().max(400).optional(),
   enabled: z.boolean().optional(),
   is_default: z.boolean().optional(),
-  price_in: z.number().min(0).max(10000).optional(),
-  price_out: z.number().min(0).max(10000).optional(),
+  price_in: z.number().min(0).max(100_000_000).optional(),
+  price_out: z.number().min(0).max(100_000_000).optional(),
 })
 
 // null clears a feature's assignment (→ global default). (R35 / D23)

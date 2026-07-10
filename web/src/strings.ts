@@ -25,8 +25,18 @@ export const TIER_LABELS: Record<string, { label: string; hint: string }> = {
   deep: { label: 'Deepest', hint: 'The most thorough interviewer we offer' },
 }
 
-/** Rough $ cost of one practice interview on a given per-Mtok price pair. */
+/** The deploy's billing currency label (part of the per-locale seam — Toman for the FA deploy). */
+export const CURRENCY = 'Toman'
+
+/** Rough cost of one practice interview on a given per-Mtok price pair (deploy currency). */
 export function costPerInterview(priceIn: number, priceOut: number, perInterview: number): number {
   // A session is roughly 70% input (prompt + history) / 30% output.
   return (perInterview * (0.7 * priceIn + 0.3 * priceOut)) / 1_000_000
+}
+
+/** "≈ 210,000 Toman per interview" — locale-formatted, currency-labeled. */
+export function costLabel(priceIn: number, priceOut: number, perInterview: number): string {
+  const cost = costPerInterview(priceIn, priceOut, perInterview)
+  const rounded = cost >= 100 ? Math.round(cost) : Math.round(cost * 100) / 100
+  return `≈ ${rounded.toLocaleString()} ${CURRENCY} per interview`
 }

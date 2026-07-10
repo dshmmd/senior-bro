@@ -6,12 +6,13 @@ import { useConfirm } from '../../components/Confirm'
 import { useToast } from '../../components/Toast'
 import { AdminShell } from './AdminShell'
 
-const PROVIDERS = ['anthropic', 'openai', 'arvan', 'mock'] as const
+// Arvan first — it's the production gateway (D19); the rest stay for dev/testing.
+const PROVIDERS = ['arvan', 'anthropic', 'openai', 'mock'] as const
 
 const blankForm = {
   label: '',
-  provider: 'anthropic' as string,
-  model: 'claude-opus-4-8',
+  provider: 'arvan' as string,
+  model: '',
   base_url: '',
   apiKey: '',
   enabled: true,
@@ -97,7 +98,7 @@ export function AdminModels() {
               <th>Label</th>
               <th>Provider · model</th>
               <th>Key</th>
-              <th>$/Mtok (in/out)</th>
+              <th>Price/Mtok (in/out)</th>
               <th>State</th>
               <th></th>
             </tr>
@@ -197,7 +198,7 @@ export function AdminModels() {
             />
           </label>
           <label>
-            $ / 1M input
+            Price / 1M input
             <input
               type="number"
               min={0}
@@ -207,7 +208,7 @@ export function AdminModels() {
             />
           </label>
           <label>
-            $ / 1M output
+            Price / 1M output
             <input
               type="number"
               min={0}

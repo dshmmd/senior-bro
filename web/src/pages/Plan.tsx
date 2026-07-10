@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type ModelOption, type UsageInfo } from '../api'
 import { useToast } from '../components/Toast'
-import { TIER_LABELS, costPerInterview, interviewsLabel } from '../strings'
+import { TIER_LABELS, costLabel, costPerInterview, interviewsLabel } from '../strings'
 
 // Token packs the mocked checkout sells — shown to the user as interview bundles (RF-7).
 const PACKS = [
@@ -174,7 +174,7 @@ export function Plan({ onDone }: { onDone: () => void }) {
                   {cost > 0 && (
                     <>
                       <br />
-                      uses your bundle at ≈ ${cost.toFixed(2)} per interview
+                      uses your bundle at {costLabel(m.price_in, m.price_out, perInterview)}
                     </>
                   )}
                 </div>
